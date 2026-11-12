@@ -443,7 +443,7 @@ reescribe.
 | Pieza | Fichero | Que hace ejecutable |
 |---|---|---|
 | El canal MQTT | `crate/src/canal/mqtt.rs` | **LA LLAVE VIAJA EN LA URL, Y ESO OBLIGA A ESCRIBIR EL CLIENTE.** El broker se alcanza por `wss://enki-ai.online/mqtt?k=<llave>`, pero los clientes MQTT de libreria se quedan con host y puerto y **tiran el path y la query**: la llave se pierde antes del handshake y el broker contesta 401. Aqui hay un cliente minimo y completo en lo que necesita: CONNECT 3.1.1, SUBSCRIBE, PUBLISH QoS 0, PINGREQ y DISCONNECT, mas el `Framer`. `tungstenite` pone el WebSocket (RFC 6455) y nada mas; el dialogo MQTT es propio. Cada fallo tiene nombre (`url_no_segura`, `red`, `tls`, `handshake_rechazado`, `connack_rechazado` con su codigo, `suback_rechazado`, `sin_respuesta`, `protocolo`): un `Err("error")` obliga a adivinar si fue la llave o el DNS. |
-| El bucle de ordenes | `crate/src/canal/bucle.rs` | **UNA ORDEN QUE NO SE ENTIENDE NO SE EJECUTA, Y SIEMPRE SE CONTESTA CON PAR DE FALLO.** Se suscribe a `core/core-a/events/bridge/orden/#` y valida el payload contra un catalogo **cerrado** (`ACCIONES = ["publicar"]`, `REDES = ["instagram"]`): una accion desconocida no se degrada a la que haya a mano, se nombra. La mano (A3) solo se mueve si `simulacion != false` —ausente se lee como simulacion, porque ejecutar de verdad sin que nadie lo pida es irreversible— y el resultado va a `core/core-a/events/bridge/resultado` con `{ok, motivo}` **siempre los dos**: una simulacion nunca contesta `ok:true`, porque nada salio del aparato. La unica forma de `ok:true` es que la mano confirme la publicacion con su postcondicion vista, y hoy este binario no tiene mano real: lo dice con su nombre (`ejecucion_real_no_habilitada`) en vez de fingir. |
+| El bucle de ordenes | `crate/src/canal/bucle.rs` | **UNA ORDEN QUE NO SE ENTIENDE NO SE EJECUTA, Y SIEMPRE SE CONTESTA CON PAR DE FALLO.** Se suscribe a `core/core-a/events/bridge/orden/#` y valida el payload contra un catalogo **cerrado** (`ACCIONES = ["publicar", "observar"]`, `REDES = ["instagram"]`): una accion desconocida no se degrada a la que haya a mano, se nombra. La mano (A3) solo se mueve si `simulacion != false` —ausente se lee como simulacion, porque ejecutar de verdad sin que nadie lo pida es irreversible— y el resultado va a `core/core-a/events/bridge/resultado` con `{ok, motivo}` **siempre los dos**: una publicacion simulada nunca contesta `ok:true`, porque nada salio del aparato. La unica forma de `ok:true` en `publicar` es que la mano confirme la publicacion con su postcondicion vista, y hoy este binario no tiene mano real: lo dice con su nombre (`ejecucion_real_no_habilitada`) en vez de fingir. La otra accion, `observar` (19c), es **lectura pura**: se atiende aunque `simulacion` sea `true` y contesta `ok:true` solo porque la foto esta en el resultado (`volcado`), no porque se haya publicado nada. |
 | El JSON del canal | `crate/src/canal/json.rs` | **BUSCAR UNA CLAVE CON SUBCADENAS ES EJECUTAR LO QUE NO ERA.** Una orden es JSON y hay que leerla de verdad: claves repetidas se rechazan (quedarse con la ultima es como se cuela un `simulacion:false` detras de un `true`), `"false"` en texto no es `false`, y lo que no es JSON se nombra con el byte donde se rompio. Es un parser pequeño y estricto, no un `serde`: el crate no añade una cuarta dependencia para leer ocho claves. |
 | El CLI | `crate/src/main.rs` | **PROBAR UNA ORDEN A MANO Y RECIBIRLA DEL BUS PASAN POR EL MISMO CODIGO.** `--comprobar` se queda como estaba (U1); `--simular --llave <k> --url <wss://...>` abre el canal, comprueba CONNACK, suscripcion y PINGRESP y **no ejecuta nada** durante la ventana de escucha; `--orden '<json>' --simular` imprime el resultado tal cual se publicaria. `--orden` no es una puerta trasera: con `simulacion:false` contesta `ejecucion_real_no_habilitada` y no toca nada. La URL se imprime **sin la query**: un canal que loguea su URL loguea la llave. |
 
@@ -870,7 +870,7 @@ publica por el bus.
 | El puente | `crate/src/canal/observacion.rs` (Rust puro) | Sobre del bus + buzon de recados + comprobacion de forma. **No parsea el volcado.** Fuera de `cfg(android)` para probarlo en escritorio. |
 | El borde | `crate/src/jni/mod.rs` | Septimo simbolo: `publicarObservacion`. Encola; el hilo del canal vacia el buzon antes de cada espera. |
 | El volcado | `android/.../Volcado.kt` | Recorre el arbol en preorden y lo serializa a JSON plano con `view_id`, `texto`, `desc`, `hint`, caja, banderas. |
-| La pantalla | `android/.../MainActivity.kt` + `actividad_principal.xml` | Botones OBSERVAR PANTALLA y COPIAR VOLCADO, con el numero de nodos en pantalla. |
+| La pantalla | `android/.../MainActivity.kt` + `actividad_principal.xml` | Botones PROBAR VOLCADO (era OBSERVAR PANTALLA; desde 19c es diagnostico, ver ese bloque) y COPIAR VOLCADO, con el numero de nodos en pantalla. |
 | El servicio | `android/.../Accesibilidad.kt` | Presta `instancia()`, `actividadVisible()` (la que anuncia `TYPE_WINDOW_STATE_CHANGED`) y `reciclarNodo()` (regla de `recycle()` por version). |
 | Los tests | `crate/tests/observacion_puente.rs`, `crate/tests/jni_paridad.rs` | 2 puros nuevos + la paridad ampliada a los siete simbolos. |
 
@@ -975,6 +975,98 @@ El test de paridad **tiene dientes** comprobado aqui, no de palabra:
 Lo que **no** se puede verificar en este servidor: que Kotlin compile (no hay
 `kotlinc` ni Android SDK), que el `.so` enlace, y que el arbol real del movil
 produzca el volcado (eso lo dice el primer boton pulsado en el aparato).
+
+## Bloque 19c · Mirar bajo demanda desde el bus
+
+El boton del 19b **no sirve para volcar Instagram**. Android solo deja leer el
+arbol de accesibilidad de la **ventana en primer plano**, y al pulsar el boton
+nuestra propia actividad pasa a primer plano: el volcado que salia era el de
+nuestra pantalla. Para mirar Instagram habia que tener el movil en la mano, que
+es justo lo que el puente existe para evitar.
+
+Este bloque añade la accion `observar` al bucle: el movil vuelca la ventana
+activa cuando se lo piden por el bus, sin que nadie toque nada.
+
+| Pieza | Fichero | Que hace |
+|---|---|---|
+| La accion | `crate/src/canal/bucle.rs` | Catalogo cerrado con `observar`; el puerto gana `ManoDeOrdenes::observar()` (defecto: `sin_mano`); el resultado lleva `volcado` **como JSON crudo**. |
+| La mano | `crate/src/mano/android.rs` | `observar_volcado()`: pide la mirada a la cola y **valida** que el JSON se pueda leer antes de devolverlo. `observar()` sigue devolviendo `Arbol` (proyectado) sobre la misma peticion. |
+| El contrato | `crate/src/mano/arbol_json.rs` | Lee las DOS formas (la vista de `Accesibilidad.json` y el volcado de `Volcado.leer`) y las lleva al mismo `Arbol`. `CAMPOS_DEL_NODO` fija los 18 campos. |
+| El borde Kotlin | `android/.../BucleDeMano.kt` | El tipo `observar` usa `Volcado.leer()` (arbol completo) en vez de `Accesibilidad.mirar()` (vista filtrada). |
+| La pantalla | `android/.../MainActivity.kt` + `strings.xml` + layout | El boton se renombra a PROBAR VOLCADO (esta app) y una nota al pie dice que para volcar Instagram se usa la orden del bus. |
+| Los tests | `crate/tests/observar.rs` | 5 nuevos: se ejecuta en simulacion · sin mano da motivo nombrado · el volcado viaja como JSON · los 18 campos · un `view_id` repetido no duplica el arbol. |
+
+### La orden exacta (lo que hay que publicar)
+
+```text
+topic:   core/core-a/events/bridge/orden/observar
+payload: {"id":"obs-1","accion":"observar"}
+```
+
+Cualquier subtopic bajo `core/core-a/events/bridge/orden/` vale (el aparato se
+suscribe a `orden/#`); el nombre de detras es libre y sirve para leer el log.
+`red` y `texto` son opcionales en `observar`: la orden pide una foto, no una
+publicacion. El resultado sale por `core/core-a/events/bridge/resultado`:
+
+```json
+{"id":"obs-1","accion":"observar","red":"instagram","ok":true,"simulacion":true,
+ "motivo":null,"detalle":"volcado de la ventana activa: 81234 bytes","gestos":0,
+ "volcado":{"paquete":"com.instagram.android","actividad":"...","momento":1712345678901,
+            "truncado":false,"nodos":[ ... ]}}
+```
+
+`volcado` va **como objeto**, no como cadena escapada: quien lo lee quiere el
+arbol. Se empalma crudo al final del objeto del resultado porque meterlo en un
+`Valor::Texto` lo escaparia.
+
+### Por que `observar` NO se veta en simulacion
+
+El veto de `simulacion` existe para lo **irreversible**: un post publicado no se
+despublica, asi que ejecutar de verdad sin que nadie lo haya pedido es el error
+caro. Mirar no cambia nada en el aparato, no gasta cuota y no tiene postcondicion
+que afirmar. Vetar una lectura por `simulacion:true` obligaria a pedir "ejecucion
+real" para LEER, que es absurdo. Es la unica accion con `ok:true` sin
+postcondicion, y es honesto: lo que se pidio (la foto) esta en el resultado.
+
+### Los dos motivos con nombre
+
+| Motivo | Cuando |
+|---|---|
+| `sin_mano` | Este binario no tiene arbol (servidor), o el borde JNI no esta cargado. |
+| `mano_sin_respuesta` | La capa Kotlin no contesta en 10 s (`PLAZO_DE_RESPUESTA` de `mano::cola`). |
+| `servicio_no_activo` / `sin_ventana` / `ocupado` | El aparato no pudo mirar y lo dice con su motivo, sin traducir. |
+
+### El contrato del arbol, en un solo sitio
+
+`Volcado.kt` serializa 18 campos por nodo (`id`, `padre`, `profundidad`,
+`clase`, `view_id`, `texto`, `desc`, `hint`, `tocable`, `editable`, `visible`,
+`habilitado`, `x1`, `y1`, `x2`, `y2`, `seleccionado`, `marcado`) y aqui `id` es
+el **indice** mientras la identidad es `view_id`. `mano::arbol_json` es el unico
+sitio que traduce ese JSON: resuelve `padre` por indice, compone la caja desde
+las cuatro esquinas, deriva `tipo` de `clase`/`editable`, toma `tocable` como
+`isClickable && isEnabled` y **desambigua `view_id` repetidos** (`#indice`), que
+es lo que impide que diez `image_button` iguales reciban todos los mismos hijos.
+`CAMPOS_DEL_NODO` fija la lista, y `crate/tests/observar.rs` la recorre: si
+Kotlin añade o quita un campo, falla el test en el servidor, no el volcado en el
+movil.
+
+### Verificacion del bloque (real, en este servidor)
+
+```bash
+cd modules/instagram-bridge/crate
+cargo test --offline
+# 84 pasan, 0 fallan (antes del bloque: 79)
+#   observar            5  (nuevos: simulacion · sin mano · volcado json · 18 campos · view_id repetido)
+#   resto              79
+
+for f in ../tests/*.test.js; do node "$f" >/dev/null || echo "FALLO $f"; done
+# 52 suites JS OK
+```
+
+Lo que **no** se puede verificar en este servidor: que Kotlin compile (no hay
+`kotlinc` ni Android SDK) y que el volcado real de Instagram llegue por el bus.
+El APK lo compila el workflow; la prueba de verdad es publicar la orden de
+arriba con el movil en segundo plano y leer el `volcado` del resultado.
 
 ## Tests
 

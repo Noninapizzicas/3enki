@@ -3,9 +3,9 @@
 // BucleDeMano.kt — el SONDEO de la cola: el lado Kotlin de la mano (bloque 19a).
 //
 // Lo que hace: cada 150 ms le pregunta al crate si tiene una peticion
-// (`PuenteNativo.siguientePeticion`), la ejecuta con `Accesibilidad.kt` (mirar) o
-// con `Gestos.kt` (tocar / escribir / desplazar / esperar) y SIEMPRE contesta con
-// `PuenteNativo.entregarRespuesta`.
+// (`PuenteNativo.siguientePeticion`), la ejecuta con `Volcado.kt` (mirar, el
+// arbol completo de 19c) o con `Gestos.kt` (tocar / escribir / desplazar /
+// esperar) y SIEMPRE contesta con `PuenteNativo.entregarRespuesta`.
 //
 // ```text
 //   Rust (hilo del bucle)                  Kotlin (coroutine, Dispatchers.IO)
@@ -40,8 +40,8 @@
 // # Lo que NO hace
 //
 //   - NO ejecuta recetas. Recibe UN paso por peticion; encadenarlos es del crate.
-//   - NO guarda estado de la pantalla. La foto la lee `Accesibilidad.mirar()` en
-//     el momento; una foto guardada es la que publica en la cuenta equivocada.
+//   - NO guarda estado de la pantalla. La foto la lee `Volcado.leer()` en el
+//     momento; una foto guardada es la que publica en la cuenta equivocada.
 //   - NO reintenta un gesto. Un toque que falla sube como fallo: repetirlo a
 //     ciegas es el duplicado que A5 existe para evitar.
 //
@@ -79,7 +79,13 @@ object BucleDeMano {
     const val TIPO_OBSERVAR = "observar"
     const val TIPO_EJECUTAR = "ejecutar"
 
-    /** Motivos que ESTE lado puede declarar. Estables y sin tildes. */
+    /**
+     * Motivos que ESTE lado puede declarar. Estables y sin tildes.
+     *
+     * `servicio_no_activo` lo declara `Volcado` (que es quien mira desde 19c) y
+     * se conserva aqui como parte del vocabulario del sondeo: sin servicio no
+     * hay volcado, y quien lea el motivo del bus tiene que reconocerlo.
+     */
     const val MOTIVO_SIN_SERVICIO = "servicio_no_activo"
     const val MOTIVO_PETICION_ILEGIBLE = "peticion_ilegible"
     const val MOTIVO_SIN_ID = "peticion_sin_id"
@@ -224,16 +230,22 @@ object BucleDeMano {
     /**
      * Lee la pantalla AHORA y devuelve el JSON que el crate convierte en `Arbol`.
      *
+     * Usa `Volcado.leer()` (el arbol COMPLETO, los 18 campos) y NO
+     * `Accesibilidad.mirar()` (la vista filtrada de A1). El motivo es el de
+     * arriba: una orden `observar` llega porque alguien esta escribiendo una
+     * receta, y una receta se escribe con lo que `mirar()` tira — los nodos
+     * `visible:false` (que explican por que el boton de al lado no responde), el
+     * `hint` de un campo vacio, la `clase` de verdad y `isChecked`/`isSelected`.
+     * `mirar()` sigue siendo la vista de A1 y no se toca: cada una tiene su
+     * oficio y el crate sabe leer las dos (`mano::arbol_json`).
+     *
      * Si no hay servicio de accesibilidad se contesta el motivo, no una foto
      * vacia: `arbol_vacio` y "no hay servicio" son cosas distintas y A1 las
      * trata distinto.
      */
-    private fun observar(): String {
-        val servicio = Accesibilidad.instancia() ?: return fallo(MOTIVO_SIN_SERVICIO)
-        return when (val lectura = servicio.mirar()) {
-            is Accesibilidad.Lectura.Observada -> servicio.json(lectura.instantanea)
-            is Accesibilidad.Lectura.NoSePudo -> servicio.json(lectura)
-        }
+    private fun observar(): String = when (val volcado = Volcado.leer()) {
+        is Volcado.Resultado.Hecho -> volcado.json
+        is Volcado.Resultado.Imposible -> fallo(volcado.motivo)
     }
 
     // ---- ejecutar un paso (A3, lado Android) ------------------------------

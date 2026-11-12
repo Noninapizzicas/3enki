@@ -5,9 +5,15 @@
 //! peticiones en `mano::cola` y espera la respuesta que deja `BucleDeMano.kt`.
 //!
 //! ```text
-//! A1 (observador)  ->  ManoAndroid::observar()   -> cola: observar  -> Kotlin: Accesibilidad.mirar()
+//! A1 (observador)  ->  ManoAndroid::observar()   -> cola: observar  -> Kotlin: Volcado.leer()
 //! A3 (ejecutor)    ->  ManoAndroid::tocar/...    -> cola: ejecutar  -> Kotlin: Gestos.tocar/...
 //! ```
+//!
+//! El volcado que contesta Kotlin es el de `Volcado.kt` (los 18 campos del
+//! nodo), NO la vista filtrada de `Accesibilidad.mirar()`: quien pide `observar`
+//! escribe una receta, y una receta necesita los nodos `visible:false` y los
+//! `hint`. `arbol_json` es el unico sitio que conoce ese JSON; aqui no se
+//! reinterpreta nada.
 //!
 //! # Por que esta pieza implementa DOS puertos y no es una clase nueva
 //!
@@ -173,11 +179,31 @@ impl ManoAndroid {
     /// Es una mirada NUEVA por llamada: no hay cache. Un arbol de hace dos
     /// segundos es exactamente lo que A1 prohibe usar para decidir.
     pub fn observar(&self) -> Result<Arbol, FalloDeMano> {
-        let respuesta = self.pedir(TipoDePeticion::Observar, String::new(), PLAZO_DE_RESPUESTA)?;
-        arbol_json::desde_json(&respuesta).map_err(|fallo| match fallo {
+        let volcado = self.observar_volcado()?;
+        arbol_json::desde_json(&volcado).map_err(|fallo| match fallo {
             FalloDeArbol::NoSePudoMirar { motivo } => FalloDeMano::Aparato { motivo },
             otro => FalloDeMano::RespuestaIlegible { motivo: otro.descripcion() },
         })
+    }
+
+    /// OBSERVAR (crudo): la foto de la ventana activa, tal y como la serializo
+    /// `Volcado.kt`.
+    ///
+    /// Devuelve el JSON SIN proyectar porque es lo que pide una orden
+    /// `observar`: los 18 campos del nodo (`view_id`, `clase`, `hint`,
+    /// `habilitado`, `seleccionado`, `marcado`...) son justo lo que hace falta
+    /// para escribir una receta, y `Arbol` no los modela todos.
+    ///
+    /// El volcado se valida ANTES de devolverlo (`arbol_json::desde_json`): una
+    /// foto que no se puede leer no es una foto, es una respuesta rota, y se
+    /// nombra aqui en vez de salir al bus como si fuera buena.
+    pub fn observar_volcado(&self) -> Result<String, FalloDeMano> {
+        let respuesta = self.pedir(TipoDePeticion::Observar, String::new(), PLAZO_DE_RESPUESTA)?;
+        match arbol_json::desde_json(&respuesta) {
+            Ok(_) => Ok(respuesta),
+            Err(FalloDeArbol::NoSePudoMirar { motivo }) => Err(FalloDeMano::Aparato { motivo }),
+            Err(otro) => Err(FalloDeMano::RespuestaIlegible { motivo: otro.descripcion() }),
+        }
     }
 
     /// EJECUTAR UN PASO: entrega UN gesto y dice si el aparato lo acepto.
@@ -312,5 +338,25 @@ impl ManoDeOrdenes for ManoAndroid {
                 orden.accion, orden.red
             ),
         )
+    }
+
+    /// MIRAR bajo demanda (bloque 19c). Devuelve el volcado CRUDO.
+    ///
+    /// La cola ya sabe nombrar los dos fallos que importan: sin respuesta
+    /// (`mano_sin_respuesta`, el otro lado no contesta en 10 s) y aparato
+    /// (`servicio_no_activo`, `sin_ventana`, `ocupado`...). Aqui no se traducen:
+    /// el motivo viaja tal cual hasta el resultado del bus, que es donde alguien
+    /// lo va a leer.
+    fn observar(&mut self) -> HechoDeMano {
+        match self.observar_volcado() {
+            Ok(volcado) => {
+                let bytes = volcado.len();
+                HechoDeMano::con_volcado(
+                    volcado,
+                    format!("volcado de la ventana activa: {bytes} bytes"),
+                )
+            }
+            Err(fallo) => HechoDeMano::nada(fallo.motivo(), fallo.descripcion()),
+        }
     }
 }

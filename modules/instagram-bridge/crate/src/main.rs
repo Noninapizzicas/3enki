@@ -33,7 +33,7 @@ use std::process::ExitCode;
 use std::time::Duration;
 
 use enki_instagram_bridge::canal::bucle::{
-    atender, ManoAusente, Orden, TOPIC_ORDENES, TOPIC_RESULTADO,
+    atender, ManoAusente, Orden, ACCION_OBSERVAR, TOPIC_ORDENES, TOPIC_RESULTADO,
 };
 use enki_instagram_bridge::canal::mqtt::{self, url_con_llave, Canal};
 use enki_instagram_bridge::mano::exclusividad::{comprobar, HechoVisible, Mirada};
@@ -188,6 +188,12 @@ fn orden_en_seco(json: &str) -> ExitCode {
     // payload dice QUE paso, esto dice que hacer con ello.
     match Orden::desde_payload(json) {
         Err(fallo) => eprintln!("orden rechazada: {fallo}"),
+        // `observar` no pasa por el veto de simulacion (es lectura pura): el
+        // diagnostico que habla de "no se toco nada" no aplica, y decirlo seria
+        // mentir sobre lo que hizo el binario.
+        Ok(orden) if orden.accion == ACCION_OBSERVAR => eprintln!(
+            "lectura pedida: este binario no tiene arbol de accesibilidad, asi que no hay volcado (sin_mano)"
+        ),
         Ok(orden) if !orden.simulacion => eprintln!(
             "la orden pide ejecucion real (simulacion:false) y este binario solo tiene la mano simulada: no se toco nada"
         ),

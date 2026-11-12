@@ -159,6 +159,14 @@ impl fmt::Display for Caja {
 /// `id` es la identidad (`getViewIdResourceName`, o un id sintetico por
 /// posicion si la app no declara ninguno). `texto` y `descripcion` son las dos
 /// cosas que una persona lee; el nombre visible efectivo es `ancla()`.
+///
+/// Los seis campos de despues de `visible_al_usuario` son el resto del contrato
+/// del volcado (bloque 19c, `arbol_json::CAMPOS_DEL_NODO`): existen porque
+/// escribir una RECETA necesita el aparato tal y como lo declara — la clase de
+/// verdad, el `hint` de un campo, si estaba marcado o seleccionado. El crate no
+/// decide con ellos todavia (salvo `editable`, que entra en `tipo`), pero
+/// perderlos en la frontera convertiria el volcado en una version "casi" del
+/// arbol, y quien escribe la receta no sabria que le falta.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Nodo {
     pub id: String,
@@ -168,6 +176,14 @@ pub struct Nodo {
     pub caja: Caja,
     pub tocable: bool,
     pub visible_al_usuario: bool,
+    /// La clase corta que declara el aparato (`Button`, `EditText`, ...).
+    pub clase: Option<String>,
+    /// El `hintText`: lo que un campo vacio enseña antes de escribir.
+    pub hint: Option<String>,
+    pub editable: bool,
+    pub habilitado: bool,
+    pub seleccionado: bool,
+    pub marcado: bool,
     pub hijos: Vec<Nodo>,
 }
 
@@ -181,6 +197,12 @@ impl Nodo {
             caja: Caja::default(),
             tocable: false,
             visible_al_usuario: true,
+            clase: None,
+            hint: None,
+            editable: false,
+            habilitado: true,
+            seleccionado: false,
+            marcado: false,
             hijos: Vec::new(),
         }
     }

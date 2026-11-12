@@ -13,7 +13,9 @@
 //!     lo que impide leer medio CONNACK como si fuera un rechazo.
 //!   - `bucle`: el contrato de ordenes (`bridge/orden` -> la mano ->
 //!     `bridge/resultado`), la validacion contra catalogo cerrado y el par de
-//!     fallo que impide dar un envio por hecho.
+//!     fallo que impide dar un envio por hecho. Dos acciones: `publicar` (mueve
+//!     el mundo, pasa por el veto de simulacion) y `observar` (bloque 19c:
+//!     lectura pura, devuelve el volcado de la ventana activa y NO se veta).
 //!   - `json`: el lector y escritor de JSON minimo, porque una orden es JSON y
 //!     buscarla con subcadenas es la clase de atajo que ejecuta lo que no era.
 //!   - `observacion` (bloque 19b): el volcado de pantalla del aparato camino del
@@ -35,5 +37,8 @@ pub mod json;
 pub mod mqtt;
 pub mod observacion;
 
-pub use bucle::{atender, servir, Bus, HechoDeMano, ManoAusente, ManoDeOrdenes, Opcion, Orden, Resultado};
+pub use bucle::{
+    atender, servir, Bus, HechoDeMano, ManoAusente, ManoDeOrdenes, Opcion, Orden, Resultado,
+    ACCIONES, ACCION_OBSERVAR, ACCION_PUBLICAR,
+};
 pub use mqtt::{url_con_llave, Canal, FalloDeCanal, Framer};

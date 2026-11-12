@@ -9,7 +9,7 @@
 //! vivir durante semanas. Con este modulo FUERA del `cfg(android)`, ese contrato
 //! se prueba en escritorio con `cargo test`, sin movil.
 //!
-//! # El contrato (lo que manda `Accesibilidad.json`)
+//! # El contrato (lo que manda `Accesibilidad.json`, 19a)
 //!
 //! ```text
 //! {"lectura":"observada","pantalla":"crear","plataforma":"instagram",
@@ -22,6 +22,23 @@
 //! {"lectura":"desconocida","motivo":"servicio_no_activo"}
 //! {"ok":false,"motivo":"..."}          (respuesta de error del bucle Kotlin)
 //! ```
+//!
+//! # El contrato del volcado (lo que manda `Volcado.leer`, 19c)
+//!
+//! ```text
+//! {"paquete":"com.instagram.android","actividad":"..."|null,"momento":...,"truncado":false,
+//!  "nodos":[{"id":0,"padre":null,"profundidad":1,"clase":"Button",
+//!            "view_id":"com.instagram.android:id/publicar"|null,
+//!            "texto":"..."|null,"desc":"..."|null,"hint":"..."|null,
+//!            "tocable":true,"editable":false,"visible":true,"habilitado":true,
+//!            "x1":0,"y1":0,"x2":10,"y2":10,"seleccionado":false,"marcado":false}, ...]}
+//! ```
+//!
+//! Los 18 campos del nodo son `CAMPOS_DEL_NODO`. Aqui `id` es el INDICE en la
+//! lista y `padre` el indice del padre (`null` = hijo de la ventana); la
+//! identidad de verdad es `view_id`. No hay `lectura`: un volcado es una foto, y
+//! cuando no se pudo mirar el aparato contesta `{ok:false,motivo}`. Las dos
+//! formas entran por la MISMA funcion y acaban en el MISMO `Arbol`.
 //!
 //! **La lista llega PLANA** (preorden, con `padre` y `profundidad`), y aqui se
 //! vuelve a montar el arbol: `observador` y `ejecutor` recorren `hijos`, y un
@@ -61,6 +78,38 @@ pub const LECTURA_DESCONOCIDA: &str = "desconocida";
 /// motivo, que es lo que se hace con cualquier mirada incompleta.
 pub const LIMITE_DE_PROFUNDIDAD: usize = 64;
 
+/// Los 18 campos que serializa un nodo `Volcado.kt` (bloque 19c).
+///
+/// Esta lista ES el contrato entre el movil y el crate, y vive aqui porque
+/// `arbol_json` es el unico sitio que lee ese JSON. Si Kotlin anade un campo, se
+/// anade aqui y en `Nodo`; el test `contrato_del_arbol_tiene_los_18_campos`
+/// recorre esta constante, asi que una lista copiada en dos sitios no se puede
+/// desincronizar: el fallo aparece en `cargo test`, no como `arbol_vacio` en el
+/// movil tres semanas despues.
+///
+/// `id`, `padre` y `profundidad` describen la POSICION en la lista plana
+/// (indice del nodo, indice del padre, nivel); el resto es el nodo.
+pub const CAMPOS_DEL_NODO: [&str; 18] = [
+    "id",
+    "padre",
+    "profundidad",
+    "clase",
+    "view_id",
+    "texto",
+    "desc",
+    "hint",
+    "tocable",
+    "editable",
+    "visible",
+    "habilitado",
+    "x1",
+    "y1",
+    "x2",
+    "y2",
+    "seleccionado",
+    "marcado",
+];
+
 // ---------------------------------------------------------------------------
 // El fallo
 // ---------------------------------------------------------------------------
@@ -85,6 +134,9 @@ pub enum FalloDeArbol {
     NodoNoObjeto { indice: usize, tipo: &'static str },
     /// Un nodo sin id (o con el id en blanco): sin id no hay arbol que montar.
     NodoSinId { indice: usize },
+    /// Un `padre` numerico que no esta en la lista: el volcado cita un nodo que
+    /// no vino. Es un contrato roto, no un arbol raro.
+    PadreDesconocido { indice: usize, padre: i64 },
 }
 
 impl FalloDeArbol {
@@ -99,6 +151,7 @@ impl FalloDeArbol {
             FalloDeArbol::SinNodos => "sin_nodos",
             FalloDeArbol::NodoNoObjeto { .. } => "nodo_no_objeto",
             FalloDeArbol::NodoSinId { .. } => "nodo_sin_id",
+            FalloDeArbol::PadreDesconocido { .. } => "padre_desconocido",
         }
     }
 
@@ -127,6 +180,9 @@ impl FalloDeArbol {
             FalloDeArbol::NodoSinId { indice } => {
                 format!("el nodo {indice} no trae id: sin id no se puede montar el arbol")
             }
+            FalloDeArbol::PadreDesconocido { indice, padre } => format!(
+                "el nodo {indice} dice colgar del nodo {padre} y ese nodo no vino en la lista"
+            ),
         }
     }
 
@@ -144,7 +200,8 @@ impl FalloDeArbol {
             | FalloDeArbol::SinLectura
             | FalloDeArbol::LecturaDesconocida { .. }
             | FalloDeArbol::NodoNoObjeto { .. }
-            | FalloDeArbol::NodoSinId { .. } => Some(SinMirada::AparatoAusente),
+            | FalloDeArbol::NodoSinId { .. }
+            | FalloDeArbol::PadreDesconocido { .. } => Some(SinMirada::AparatoAusente),
         }
     }
 }
@@ -183,6 +240,20 @@ pub fn desde_json(texto: &str) -> Result<Arbol, FalloDeArbol> {
 }
 
 /// Lo mismo, con el JSON ya parseado.
+///
+/// Acepta las DOS formas que existen del mismo dato, porque el contrato es uno
+/// pero los emisores son dos:
+///
+///   - `Accesibilidad.json()` (19a): trae `lectura`, `pantalla`,
+///     `cuenta_visible`, `mirada` y nodos con `id` de texto, `ancla`, `tipo` y
+///     `caja`.
+///   - `Volcado.leer()` (19c): el volcado crudo, con `paquete`, `actividad`,
+///     `truncado` y los 18 campos del nodo (`view_id`, `clase`, `hint`, `x1..y2`,
+///     las seis banderas). No trae `lectura`: un volcado es una foto, y si no se
+///     pudo mirar el aparato contesta `{ok:false,motivo}`.
+///
+/// Las dos formas acaban en el MISMO `Arbol`. Tener dos lectores seria tener dos
+/// comportamientos: el de produccion seria el que nadie prueba.
 pub fn desde_valor(valor: &Valor) -> Result<Arbol, FalloDeArbol> {
     if !matches!(valor, Valor::Objeto(_)) {
         return Err(FalloDeArbol::NoEsObjeto { tipo: valor.tipo() });
@@ -200,11 +271,19 @@ pub fn desde_valor(valor: &Valor) -> Result<Arbol, FalloDeArbol> {
         return Err(FalloDeArbol::NoSePudoMirar { motivo: motivo_de(foto) });
     }
 
-    let lectura = foto
-        .obtener("lectura")
-        .and_then(Valor::como_texto)
-        .map(|t| t.trim().to_ascii_lowercase())
-        .ok_or(FalloDeArbol::SinLectura)?;
+    // `lectura`: la manda `Accesibilidad.json()`. El volcado de 19c NO la trae
+    // porque una foto cruda no declara como fue la mirada. Un objeto con `nodos`
+    // y sin `lectura` es un volcado, y un volcado es una lectura observada; se
+    // exige `nodos` para no convertir cualquier objeto suelto en "observada".
+    let lectura = match texto_de(foto, "lectura") {
+        Some(t) => t.trim().to_ascii_lowercase(),
+        // La huella del volcado: `paquete` (que `Volcado.leer()` escribe
+        // siempre) o una lista de nodos con algo dentro. Un objeto con `nodos:[]`
+        // y sin nada mas NO es un volcado: es un payload al que le falta decir
+        // como fue la lectura, y eso se nombra (`sin_lectura`).
+        None if es_volcado(foto) => LECTURA_OBSERVADA.to_string(),
+        None => return Err(FalloDeArbol::SinLectura),
+    };
 
     match lectura.as_str() {
         LECTURA_OBSERVADA => {}
@@ -219,30 +298,55 @@ pub fn desde_valor(valor: &Valor) -> Result<Arbol, FalloDeArbol> {
         _ => return Err(FalloDeArbol::SinNodos),
     };
 
-    let mut sueltos: Vec<Suelto> = Vec::with_capacity(nodos.len().min(LIMITE_DE_NODOS));
-    for (indice, crudo) in nodos.iter().enumerate() {
-        if indice >= LIMITE_DE_NODOS {
-            // El tope del aparato y el del crate son el mismo numero: si llega
-            // mas, el JSON no es de este contrato. Se corta y la foto sera
-            // parcial, que es lo que se hace con una lectura incompleta.
-            break;
+    // Primero las identidades: `padre` puede venir como INDICE (volcado) y hay
+    // que traducirlo al id del nodo padre antes de leer los nodos.
+    let mut usadas: std::collections::HashSet<String> = std::collections::HashSet::new();
+    let mut identidades: Vec<String> = Vec::with_capacity(nodos.len().min(LIMITE_DE_NODOS));
+    for (indice, crudo) in nodos.iter().enumerate().take(LIMITE_DE_NODOS) {
+        if !matches!(crudo, Valor::Objeto(_)) {
+            return Err(FalloDeArbol::NodoNoObjeto { indice, tipo: crudo.tipo() });
         }
-        sueltos.push(leer_nodo(indice, crudo)?);
+        match identidad(indice, crudo, &mut usadas) {
+            Some(id) => identidades.push(id),
+            None => return Err(FalloDeArbol::NodoSinId { indice }),
+        }
     }
 
-    let mut arbol = Arbol::nuevo(Pantalla::desde_str(texto_de(foto, "pantalla").unwrap_or("")));
-    arbol.plataforma = texto_de(foto, "plataforma").unwrap_or("instagram").trim().to_string();
-    if arbol.plataforma.is_empty() {
-        arbol.plataforma = "instagram".to_string();
+    let mut sueltos: Vec<Suelto> = Vec::with_capacity(identidades.len());
+    for (indice, crudo) in nodos.iter().enumerate().take(LIMITE_DE_NODOS) {
+        sueltos.push(leer_nodo(indice, crudo, &identidades)?);
     }
-    arbol.cuenta_visible = texto_de(foto, "cuenta_visible").map(|c| c.trim().to_string());
+
+    let truncado_declarado = booleano_de(foto, &["truncado"], false);
+    let mut truncado = sueltos.len() < nodos.len();
+
+    let mut arbol = Arbol::nuevo(Pantalla::desde_str(texto_de(foto, "pantalla").unwrap_or("")));
+    arbol.plataforma = plataforma_de(foto);
+    arbol.cuenta_visible = texto_de(foto, "cuenta_visible")
+        .map(|c| c.trim().to_string())
+        .filter(|c| !c.is_empty())
+        // El volcado no trae la cuenta: se deduce de lo que el aparato declaro
+        // (misma pista que usaba `Accesibilidad.cuentaVisible`).
+        .or_else(|| cuenta_visible_en(nodos));
     arbol.mirada = match texto_de(foto, "mirada") {
         Some(m) if m.trim().eq_ignore_ascii_case("parcial") => Mirada::Parcial,
-        _ => Mirada::Completa,
+        Some(_) => Mirada::Completa,
+        // Sin `mirada`, un volcado recortado por el tope del aparato es parcial.
+        None if truncado_declarado => Mirada::Parcial,
+        None => Mirada::Completa,
     };
+    // Una mirada parcial sin motivo no entra (regla de A1): si el aparato solo
+    // dijo `truncado:true`, el motivo es ese y se nombra.
     arbol.motivo_sin_mirada = texto_de(foto, "motivo_sin_mirada")
         .map(|m| m.trim().to_string())
-        .filter(|m| !m.is_empty());
+        .filter(|m| !m.is_empty())
+        .or_else(|| {
+            if arbol.mirada == Mirada::Parcial {
+                Some("arbol_truncado".to_string())
+            } else {
+                None
+            }
+        });
     // `version` es el sello de la foto. El aparato no lo manda, manda el
     // instante en que miro: es lo unico que distingue una foto de otra, y
     // inventar un contador propio diria "la foto 1, la foto 2" sin poder
@@ -251,11 +355,9 @@ pub fn desde_valor(valor: &Valor) -> Result<Arbol, FalloDeArbol> {
         .or_else(|| numero_de(foto, "momento"))
         .unwrap_or(0);
 
-    let mut truncado = sueltos.len() < nodos.len();
     arbol.raiz.hijos = montar(&sueltos, &mut truncado);
 
-    // Una mirada parcial sin motivo no entra (regla de A1). El truncamiento
-    // local si tiene motivo, y se declara.
+    // El truncamiento local si tiene motivo, y se declara.
     if truncado && arbol.mirada == Mirada::Completa {
         arbol.mirada = Mirada::Parcial;
         arbol.motivo_sin_mirada = Some("arbol_truncado".to_string());
@@ -294,18 +396,161 @@ fn booleano_de(valor: &Valor, claves: &[&str], por_defecto: bool) -> bool {
     por_defecto
 }
 
-fn caja_de(valor: &Valor) -> Caja {
-    let caja = match valor.obtener("caja") {
-        Some(c @ Valor::Objeto(_)) => c,
-        _ => return Caja::default(),
-    };
-    let entero = |clave: &str| -> i32 {
-        match caja.obtener(clave) {
-            Some(Valor::Numero(n)) => *n as i32,
-            _ => 0,
+fn entero_de(valor: &Valor, clave: &str) -> Option<i32> {
+    match valor.obtener(clave) {
+        Some(Valor::Numero(n)) => Some(*n as i32),
+        _ => None,
+    }
+}
+
+/// La plataforma de la foto: la que declara el contrato viejo o, en un volcado,
+/// la que dice el `paquete` de la ventana.
+///
+/// Un paquete que no es Instagram se nombra tal cual: el arbol es de otra app y
+/// quien lo lea tiene que poder verlo, en vez de leer "instagram" por defecto.
+fn plataforma_de(foto: &Valor) -> String {
+    if let Some(plataforma) = texto_de(foto, "plataforma").map(str::trim).filter(|p| !p.is_empty()) {
+        return plataforma.to_string();
+    }
+    match texto_de(foto, "paquete").map(str::trim).filter(|p| !p.is_empty()) {
+        Some(paquete) if paquete.to_ascii_lowercase().contains("instagram") => {
+            "instagram".to_string()
         }
+        Some(paquete) => paquete.to_string(),
+        None => "instagram".to_string(),
+    }
+}
+
+/// ¿Este objeto es un volcado crudo (`Volcado.leer()`, 19c)?
+///
+/// Se reconoce por lo que ese emisor escribe siempre: `paquete` o una lista de
+/// nodos con algo dentro. No se adivina por la ausencia de `lectura` a secas: un
+/// payload sin `lectura` y sin nada mas no es una foto, es un contrato roto.
+fn es_volcado(foto: &Valor) -> bool {
+    if texto_de(foto, "paquete").map(str::trim).is_some_and(|p| !p.is_empty()) {
+        return true;
+    }
+    matches!(foto.obtener("nodos"), Some(Valor::Lista(nodos)) if !nodos.is_empty())
+}
+
+/// El handle sin `@` ni espacios: cosmetico, no comparativo.
+fn normalizar_handle(v: &str) -> String {
+    v.trim().trim_start_matches('@').trim().to_string()
+}
+
+/// La cuenta que se ve, si se ve, mirando los nodos CRUDOS.
+///
+/// Es la misma pista que usaba `Accesibilidad.cuentaVisible` (`view_id` con
+/// `username`, `action_bar_title` o `profile_header`), pero funciona sobre el
+/// volcado, que no trae `cuenta_visible` en la cabecera. Si no se encuentra,
+/// `None` — y `None` es "no se vio", que U1 trata como indeterminado y por tanto
+/// como parada. Nunca se rellena con la cuenta esperada.
+fn cuenta_visible_en(nodos: &[Valor]) -> Option<String> {
+    const PISTAS: [&str; 3] = ["username", "action_bar_title", "profile_header"];
+    for crudo in nodos {
+        let id = match texto_de(crudo, "view_id") {
+            Some(id) => id.to_ascii_lowercase(),
+            None => continue,
+        };
+        if !PISTAS.iter().any(|pista| id.contains(pista)) {
+            continue;
+        }
+        if !booleano_de(crudo, &["visible", "visible_al_usuario"], true) {
+            continue;
+        }
+        let candidato = texto_de(crudo, "texto").or_else(|| texto_de(crudo, "desc"));
+        if let Some(candidato) = candidato {
+            let handle = normalizar_handle(candidato);
+            if !handle.is_empty() {
+                return Some(handle);
+            }
+        }
+    }
+    None
+}
+
+/// La identidad de un nodo: su id de Android o, si no declara ninguno,
+/// `nodo:<indice>`.
+///
+/// `Accesibilidad.json()` manda `id` como TEXTO (ya es la identidad); el volcado
+/// manda `id` como NUMERO (el indice en la lista) y la identidad de verdad en
+/// `view_id`. Distinguirlos por el tipo no es un truco: es lo que dice el
+/// contrato de cada emisor.
+///
+/// Se desambigua al repetir. `view_id` NO es unico (hay diez `image_button`
+/// iguales) y `montar` cuelga los hijos por id del padre, asi que dos nodos con
+/// el mismo id recibirian LOS DOS la misma lista de hijos y el arbol saldria
+/// duplicado. El primero se queda con el nombre limpio (es el que una receta
+/// escrita a mano cita) y los siguientes llevan `#indice`.
+fn identidad(indice: usize, crudo: &Valor, usadas: &mut std::collections::HashSet<String>) -> Option<String> {
+    let base = match crudo.obtener("id") {
+        // Contrato viejo: `id` ya es el nombre del nodo.
+        Some(Valor::Texto(t)) if !t.trim().is_empty() => t.trim().to_string(),
+        // Volcado: `id` es el INDICE; el nombre de verdad es el `view_id`.
+        Some(Valor::Numero(_)) => match texto_de(crudo, "view_id").map(str::trim).filter(|t| !t.is_empty()) {
+            Some(view_id) => view_id.to_string(),
+            None => format!("nodo:{indice}"),
+        },
+        // Sin `id` no hay identidad que inventar: un nodo sin nombre no se
+        // puede colgar ni citar en una receta.
+        _ => return None,
     };
-    Caja::nueva(entero("x"), entero("y"), entero("ancho"), entero("alto"))
+    if usadas.insert(base.clone()) {
+        return Some(base);
+    }
+    let unico = format!("{base}#{indice}");
+    usadas.insert(unico.clone());
+    Some(unico)
+}
+
+/// Que es el nodo.
+///
+/// Con `tipo` (contrato viejo) se traduce directo. Con los datos del volcado se
+/// aplica la MISMA tabla que `Accesibilidad.tipoDe`: se mira lo que el aparato
+/// declara (`editable`, `clase`, `tocable`) y no se adivina por el texto.
+fn tipo_de(crudo: &Valor) -> Tipo {
+    if let Some(tipo) = texto_de(crudo, "tipo").map(str::trim).filter(|t| !t.is_empty()) {
+        return Tipo::desde_str(tipo);
+    }
+    let clase = texto_de(crudo, "clase").unwrap_or("");
+    if booleano_de(crudo, &["editable"], false) || clase.contains("EditText") {
+        Tipo::Campo
+    } else if clase.contains("Button") {
+        Tipo::Boton
+    } else if clase.contains("TextView") {
+        Tipo::Texto
+    } else if clase.contains("ImageView") || clase.contains("ImageButton") {
+        Tipo::Imagen
+    } else if booleano_de(crudo, &["tocable"], false) {
+        Tipo::Boton
+    } else {
+        Tipo::Desconocido
+    }
+}
+
+/// La caja del nodo: `{x,y,ancho,alto}` (contrato viejo) o las cuatro esquinas
+/// `x1,y1,x2,y2` del volcado (`getBoundsInScreen`).
+///
+/// Se guarda tal cual, sin normalizar: una caja de tamano cero conserva su
+/// posicion y `esta_vacia()` la reconoce.
+fn caja_de(crudo: &Valor) -> Caja {
+    if let Some(caja) = crudo.obtener("caja") {
+        if matches!(caja, Valor::Objeto(_)) {
+            let entero = |clave: &str| -> i32 { entero_de(caja, clave).unwrap_or(0) };
+            return Caja::nueva(entero("x"), entero("y"), entero("ancho"), entero("alto"));
+        }
+    }
+    match (
+        entero_de(crudo, "x1"),
+        entero_de(crudo, "y1"),
+        entero_de(crudo, "x2"),
+        entero_de(crudo, "y2"),
+    ) {
+        (Some(x1), Some(y1), Some(x2), Some(y2)) => {
+            Caja::nueva(x1, y1, (x2 - x1).max(0), (y2 - y1).max(0))
+        }
+        _ => Caja::default(),
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -319,23 +564,26 @@ struct Suelto {
     nodo: Nodo,
 }
 
-fn leer_nodo(indice: usize, crudo: &Valor) -> Result<Suelto, FalloDeArbol> {
+fn leer_nodo(indice: usize, crudo: &Valor, identidades: &[String]) -> Result<Suelto, FalloDeArbol> {
     if !matches!(crudo, Valor::Objeto(_)) {
         return Err(FalloDeArbol::NodoNoObjeto { indice, tipo: crudo.tipo() });
     }
 
-    let id = texto_de(crudo, "id").map(|t| t.trim().to_string()).unwrap_or_default();
-    if id.is_empty() {
-        return Err(FalloDeArbol::NodoSinId { indice });
-    }
+    // La identidad ya se calculo (y se desambiguo) en una pasada previa: aqui
+    // solo se recoge, para que `padre` por indice apunte al MISMO nombre.
+    let id = match identidades.get(indice) {
+        Some(id) if !id.is_empty() => id.clone(),
+        _ => return Err(FalloDeArbol::NodoSinId { indice }),
+    };
 
     let texto = texto_de(crudo, "texto").map(|t| t.to_string()).filter(|t| !t.trim().is_empty());
     let descripcion = texto_de(crudo, "descripcion")
+        .or_else(|| texto_de(crudo, "desc"))
         .map(|t| t.to_string())
         .filter(|t| !t.trim().is_empty())
-        // El aparato manda `ancla` (texto o descripcion, ya resuelto). Si no
-        // hay `texto`, el ancla ES la descripcion: guardarla ahi es lo que hace
-        // que `Nodo::ancla()` encuentre el nombre visible.
+        // El contrato viejo manda `ancla` (texto o descripcion, ya resuelto). Si
+        // no hay `texto`, el ancla ES la descripcion: guardarla ahi es lo que
+        // hace que `Nodo::ancla()` encuentre el nombre visible.
         .or_else(|| {
             if texto.is_some() {
                 None
@@ -344,22 +592,49 @@ fn leer_nodo(indice: usize, crudo: &Valor) -> Result<Suelto, FalloDeArbol> {
             }
         });
 
+    let habilitado = booleano_de(crudo, &["habilitado"], true);
+    let tocable = booleano_de(crudo, &["tocable"], false) && habilitado;
+
     let nodo = Nodo {
         id: id.clone(),
         texto,
         descripcion,
-        tipo: Tipo::desde_str(texto_de(crudo, "tipo").unwrap_or("")),
+        tipo: tipo_de(crudo),
         caja: caja_de(crudo),
-        tocable: booleano_de(crudo, &["tocable"], false),
-        // `Accesibilidad.kt` ya no entrega lo invisible. Se acepta la clave por
-        // si algun dia la manda, y ausente vale `true` (si viajo, se vio).
+        tocable,
+        // Ausente vale `true` (si viajo, se vio). El volcado manda `visible`
+        // tambien para los nodos ocultos, con `false`: para escribir una receta
+        // hacen falta (explican por que el boton de al lado no responde).
         visible_al_usuario: booleano_de(crudo, &["visible_al_usuario", "visible"], true),
+        clase: texto_de(crudo, "clase").map(|c| c.trim().to_string()).filter(|c| !c.is_empty()),
+        hint: texto_de(crudo, "hint").map(|h| h.trim().to_string()).filter(|h| !h.is_empty()),
+        editable: booleano_de(crudo, &["editable"], false),
+        habilitado,
+        seleccionado: booleano_de(crudo, &["seleccionado"], false),
+        marcado: booleano_de(crudo, &["marcado"], false),
         hijos: Vec::new(),
     };
 
-    let padre = texto_de(crudo, "padre")
-        .map(|t| t.trim().to_string())
-        .filter(|t| !t.is_empty() && t != "raiz");
+    let padre = match crudo.obtener("padre") {
+        // Contrato viejo: el id del padre como texto ("raiz" = la ventana).
+        Some(Valor::Texto(t)) => {
+            let t = t.trim();
+            if t.is_empty() || t == "raiz" {
+                None
+            } else {
+                Some(t.to_string())
+            }
+        }
+        // Volcado: el INDICE del padre en la lista plana (`null` = la ventana).
+        Some(Valor::Numero(n)) => {
+            let padre = *n as i64;
+            if padre < 0 || padre as usize >= identidades.len() {
+                return Err(FalloDeArbol::PadreDesconocido { indice, padre });
+            }
+            Some(identidades[padre as usize].clone())
+        }
+        _ => None,
+    };
 
     Ok(Suelto { id, padre, nodo })
 }

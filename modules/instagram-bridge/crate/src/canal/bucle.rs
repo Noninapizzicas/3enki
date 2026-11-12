@@ -19,12 +19,16 @@
 //!    adivina: `json_invalido`.
 //! 2. **La mano solo se mueve si `simulacion != false`.** Ausente se lee como
 //!    simulacion: ejecutar de verdad sin que nadie lo haya pedido es
-//!    irreversible, simular de mas solo cuesta un mensaje.
+//!    irreversible, simular de mas solo cuesta un mensaje. La excepcion es
+//!    `observar`: mirar no cambia nada en el aparato, asi que se atiende igual
+//!    con `simulacion:true` (ver la nota de `atender`).
 //! 3. **Siempre par de fallo.** Un resultado es `{ok, motivo}` y **nunca** sale
-//!    `ok:true` de una simulacion: si nada salio del aparato, decir "hecho" es
-//!    mentir. La unica forma de `ok:true` es que la mano confirme la
-//!    publicacion con su postcondicion vista (`publicado`), y eso hoy no puede
-//!    pasar en este binario: aqui no hay arbol ni gestos.
+//!    `ok:true` de una publicacion simulada: si nada salio del aparato hacia la
+//!    red, decir "hecho" es mentir. La unica forma de `ok:true` es que la mano
+//!    confirme la publicacion con su postcondicion vista (`publicado`), y eso
+//!    hoy no puede pasar en este binario: aqui no hay arbol ni gestos. La otra
+//!    forma de `ok:true` es `observar`, donde lo que se pidio —la foto— se
+//!    tiene en la mano: no afirma nada sobre la red, solo que se miro.
 //!
 //! # Lo que este fichero NO hace
 //!
@@ -54,12 +58,26 @@ pub const PREFIJO_ORDENES: &str = "core/core-a/events/bridge/orden/";
 /// Donde se contesta. Un solo topic: el aparato no elige destinatario.
 pub const TOPIC_RESULTADO: &str = "core/core-a/events/bridge/resultado";
 
+/// La accion que pide publicar el texto en la red.
+pub const ACCION_PUBLICAR: &str = "publicar";
+
+/// La accion que pide el VOLCADO de la ventana activa (bloque 19c).
+///
+/// Es una LECTURA: no toca el aparato, no gasta cuota y no tiene paso
+/// irreversible. Existe para que el movil pueda enseñar su pantalla cuando se
+/// lo piden por el bus, sin que nadie lo tenga en la mano. El boton de la app
+/// no sirve para eso: al pulsarlo, la app pasa a primer plano y Android solo
+/// deja leer la ventana EN PRIMER PLANO, asi que el volcado saldria de nuestra
+/// pantalla y no de Instagram.
+pub const ACCION_OBSERVAR: &str = "observar";
+
 /// El catalogo CERRADO de acciones (espejo del contrato de la skill).
 ///
-/// Hoy solo hay `publicar`. Añadir una accion es una decision de contrato, no un
-/// `match` mas: si estuviera abierta, una orden con `accion:"borrar_todo"` seria
-/// representable y alguien acabaria mapeandola a lo que hubiera a mano.
-pub const ACCIONES: &[&str] = &["publicar"];
+/// Hoy hay dos: `publicar` y `observar`. Añadir una accion es una decision de
+/// contrato, no un `match` mas: si estuviera abierta, una orden con
+/// `accion:"borrar_todo"` seria representable y alguien acabaria mapeandola a lo
+/// que hubiera a mano.
+pub const ACCIONES: &[&str] = &[ACCION_PUBLICAR, ACCION_OBSERVAR];
 
 /// Las plataformas que este crate opera. Es un crate de Instagram: una orden
 /// para otra red no es "casi esto", es una orden que no se sabe hacer.
@@ -72,6 +90,21 @@ pub const MOTIVO_SIMULACION: &str = "simulacion";
 /// El motivo con el que se contesta una orden que pide ejecucion real en un
 /// binario que no la tiene.
 pub const MOTIVO_SIN_MANO_REAL: &str = "ejecucion_real_no_habilitada";
+
+/// El motivo con el que una mano sin arbol contesta que no hay nada que mirar.
+///
+/// Es el nombre que sale en un `observar` cuando el binario no tiene capa
+/// Android (un servidor): lo contestan `ManoAusente` y el defecto del puerto. En
+/// el aparato, si el otro lado no contesta, el motivo es `mano_sin_respuesta`
+/// (lo pone `mano::cola`), que es otro fallo distinto y se nombra distinto. Se
+/// compara por igualdad: sin nombre no se puede diagnosticar.
+pub const MOTIVO_SIN_MANO: &str = "sin_mano";
+
+/// El motivo de una mano que dijo haber mirado y no trajo foto.
+///
+/// No deberia pasar nunca; se nombra igual porque un `ok:true` con `volcado`
+/// nulo seria un exito sin dato, que es la peor clase de resultado.
+pub const MOTIVO_VOLCADO_AUSENTE: &str = "volcado_ausente";
 
 // ---------------------------------------------------------------------------
 // La orden (lo que entra)
@@ -115,12 +148,29 @@ impl Orden {
             return Err(FalloDeOrden::AccionFueraDelCatalogo { accion });
         }
 
-        let red = texto_obligatorio(valor, "red")?;
-        if !REDES.contains(&red.as_str()) {
-            return Err(FalloDeOrden::RedDesconocida { red });
-        }
+        // `observar` es una LECTURA: no publica nada, asi que ni la red ni el
+        // texto significan nada en esa orden. Se aceptan ausentes (una orden
+        // `{"accion":"observar"}` es la forma natural de pedir una foto) y, si
+        // vienen, se validan igual que en `publicar`: una red desconocida sigue
+        // siendo un fallo, no un "da igual porque no se publica".
+        let es_lectura = accion == ACCION_OBSERVAR;
 
-        let texto = texto_obligatorio(valor, "texto")?;
+        let red = match texto_opcional(valor, "red")? {
+            Some(red) => {
+                if !REDES.contains(&red.as_str()) {
+                    return Err(FalloDeOrden::RedDesconocida { red });
+                }
+                red
+            }
+            None if es_lectura => REDES[0].to_string(),
+            None => return Err(FalloDeOrden::CampoAusente { campo: "red" }),
+        };
+
+        let texto = match texto_opcional(valor, "texto")? {
+            Some(texto) => texto,
+            None if es_lectura => String::new(),
+            None => return Err(FalloDeOrden::CampoAusente { campo: "texto" }),
+        };
 
         let archivo = match valor.obtener("archivo") {
             None | Some(Valor::Nulo) => None,
@@ -173,6 +223,25 @@ fn texto_obligatorio(valor: &Valor, campo: &'static str) -> Result<String, Fallo
         None => Err(FalloDeOrden::CampoAusente { campo }),
         Some(Valor::Texto(t)) if t.trim().is_empty() => Err(FalloDeOrden::CampoVacio { campo }),
         Some(Valor::Texto(t)) => Ok(t.clone()),
+        Some(otro) => Err(FalloDeOrden::CampoDeTipoEquivocado {
+            campo,
+            esperaba: "texto",
+            llego: otro.tipo(),
+        }),
+    }
+}
+
+/// Igual que `texto_obligatorio`, pero ausente o nulo es `None` en vez de fallo.
+///
+/// Existe por `observar`: la orden que solo pide una foto no trae `red` ni
+/// `texto`. Lo que SI llega se valida con el mismo rigor (un texto en blanco o
+/// un tipo equivocado siguen siendo fallo): relajar la ausencia no es relajar el
+/// contrato.
+fn texto_opcional(valor: &Valor, campo: &'static str) -> Result<Option<String>, FalloDeOrden> {
+    match valor.obtener(campo) {
+        None | Some(Valor::Nulo) => Ok(None),
+        Some(Valor::Texto(t)) if t.trim().is_empty() => Err(FalloDeOrden::CampoVacio { campo }),
+        Some(Valor::Texto(t)) => Ok(Some(t.clone())),
         Some(otro) => Err(FalloDeOrden::CampoDeTipoEquivocado {
             campo,
             esperaba: "texto",
@@ -244,6 +313,12 @@ impl std::fmt::Display for FalloDeOrden {
 /// `publicado` es la unica afirmacion fuerte y solo puede venir de una
 /// postcondicion vista (O1/O2). `ejecutado` sin `publicado` es "se corrieron
 /// pasos y no se puede afirmar el resultado".
+///
+/// `volcado` (19c) es la foto CRUDA de la ventana activa: el JSON tal y como lo
+/// serializo el aparato, sin proyectar. Se lleva crudo y no como `Arbol` porque
+/// quien pide `observar` lo que quiere es justo lo que el crate NO modela (los
+/// hints, los nodos invisibles, las clases): es el material con el que se
+/// escribe una receta.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct HechoDeMano {
     pub ejecutado: bool,
@@ -252,6 +327,8 @@ pub struct HechoDeMano {
     pub gestos: u64,
     pub motivo: Option<String>,
     pub detalle: Option<String>,
+    /// El JSON crudo del volcado, cuando la orden era `observar`.
+    pub volcado: Option<String>,
 }
 
 impl HechoDeMano {
@@ -263,6 +340,20 @@ impl HechoDeMano {
             gestos: 0,
             motivo: Some(motivo.into()),
             detalle: Some(detalle.into()),
+            volcado: None,
+        }
+    }
+
+    /// La mano MIRÓ y trae la foto. `ejecutado` es "se corrio la accion", no
+    /// "se publico": una lectura no afirma nada sobre la red.
+    pub fn con_volcado(volcado: impl Into<String>, detalle: impl Into<String>) -> Self {
+        Self {
+            ejecutado: true,
+            publicado: false,
+            gestos: 0,
+            motivo: None,
+            detalle: Some(detalle.into()),
+            volcado: Some(volcado.into()),
         }
     }
 }
@@ -274,6 +365,23 @@ impl HechoDeMano {
 /// mano que no mira no puede tocar.
 pub trait ManoDeOrdenes {
     fn ejecutar(&mut self, orden: &Orden) -> HechoDeMano;
+
+    /// MIRAR: devuelve la foto de la ventana activa, o el motivo por el que no.
+    ///
+    /// Es un verbo aparte de `ejecutar` a proposito. `ejecutar` mueve el mundo y
+    /// por eso pasa por el veto de la simulacion; mirar no mueve nada y no tiene
+    /// por que pedir permiso para leer. Si fuera un `match` dentro de
+    /// `ejecutar`, la mano tendria que saber de politica de simulacion, que es
+    /// justo lo que este puerto no sabe.
+    ///
+    /// El defecto contesta `sin_mano`: una mano que no ha implementado esto no
+    /// finge un volcado vacio.
+    fn observar(&mut self) -> HechoDeMano {
+        HechoDeMano::nada(
+            MOTIVO_SIN_MANO,
+            "esta mano no sabe mirar: no tiene arbol de accesibilidad que leer",
+        )
+    }
 }
 
 /// La mano del escritorio: no hay.
@@ -293,7 +401,7 @@ impl ManoAusente {
 impl ManoDeOrdenes for ManoAusente {
     fn ejecutar(&mut self, _orden: &Orden) -> HechoDeMano {
         HechoDeMano::nada(
-            "sin_mano",
+            MOTIVO_SIN_MANO,
             "este binario no tiene arbol de accesibilidad ni gestos: la mano vive en la capa Android",
         )
     }
@@ -309,9 +417,15 @@ impl ManoDeOrdenes for ManoAusente {
 /// `ok:true`): un resultado sin motivo es un resultado que no se puede auditar
 /// cuando sale mal, y el par es lo que impide leer un fallo como un exito.
 ///
-/// `simulacion` significa "no salio nada de este aparato hacia la red", y por
-/// eso es `true` tambien cuando la orden ni se entendio: un payload invalido no
-/// es una ejecucion real por mucho que la pidiera.
+/// `simulacion` es el MODO con el que se atendio la orden: `true` = no se pidio
+/// ejecucion real. Por eso es `true` tambien cuando la orden ni se entendio: un
+/// payload invalido no es una ejecucion real por mucho que la pidiera. En
+/// `observar` el campo es un espejo de la orden, porque mirar no se simula: la
+/// lectura ocurre igual y lo unico que cambia es que nadie lo pidio "de verdad".
+///
+/// `volcado` (19c) viaja como **JSON crudo**, no como texto escapado: es el
+/// arbol que devolvio el aparato y quien lo lee quiere el arbol, no una cadena
+/// con el arbol dentro.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Resultado {
     pub id: String,
@@ -322,6 +436,8 @@ pub struct Resultado {
     pub motivo: Option<String>,
     pub detalle: Option<String>,
     pub gestos: u64,
+    /// El JSON crudo de la ventana activa, solo en `observar`.
+    pub volcado: Option<String>,
 }
 
 impl Resultado {
@@ -344,16 +460,18 @@ impl Resultado {
             motivo: Some(motivo.into()),
             detalle: Some(detalle.into()),
             gestos: 0,
+            volcado: None,
         }
     }
 
-    /// JSON del resultado. El orden de las claves es fijo (ver `json::Valor`).
+    /// JSON del resultado. El orden de las claves es fijo (ver `json::Valor`),
+    /// y `volcado` va el ultimo.
     pub fn a_json(&self) -> String {
         let texto = |v: &Option<String>| match v {
             Some(t) => Valor::Texto(t.clone()),
             None => Valor::Nulo,
         };
-        Valor::objeto(vec![
+        let mut json = Valor::objeto(vec![
             ("id", Valor::Texto(self.id.clone())),
             ("accion", Valor::Texto(self.accion.clone())),
             ("red", Valor::Texto(self.red.clone())),
@@ -363,7 +481,21 @@ impl Resultado {
             ("detalle", texto(&self.detalle)),
             ("gestos", Valor::Numero(self.gestos as f64)),
         ])
-        .a_texto()
+        .a_texto();
+
+        // El volcado es JSON ya escrito por el aparato. Meterlo en un
+        // `Valor::Texto` lo escaparia y el resultado llevaria una cadena donde
+        // tiene que ir un objeto; se empalma crudo al final del objeto.
+        if json.ends_with('}') {
+            json.pop();
+            json.push_str(",\"volcado\":");
+            match &self.volcado {
+                Some(volcado) => json.push_str(volcado),
+                None => json.push_str("null"),
+            }
+            json.push('}');
+        }
+        json
     }
 }
 
@@ -400,6 +532,17 @@ pub fn atender(payload: &str, mano: &mut dyn ManoDeOrdenes) -> Resultado {
             return Resultado::fallo("", "", "", true, fallo.codigo(), fallo.descripcion());
         }
     };
+
+    // `observar` es LECTURA PURA y por eso se atiende ANTES del veto de
+    // simulacion. El veto existe porque ejecutar de verdad sin que nadie lo haya
+    // pedido es irreversible (un post publicado no se despublica); mirar no
+    // cambia nada en el aparato, no gasta cuota y no tiene postcondicion que
+    // afirmar. Vetar una lectura por `simulacion:true` solo conseguiria que el
+    // movil no pudiera enseñar su pantalla salvo que alguien pidiera "ejecutar
+    // de verdad" para leer, que es absurdo.
+    if orden.accion == ACCION_OBSERVAR {
+        return atender_observar(&orden, mano);
+    }
 
     if !orden.simulacion {
         // Veto del bloque 16: este binario no tiene mano real. Se dice con
@@ -441,6 +584,47 @@ pub fn atender(payload: &str, mano: &mut dyn ManoDeOrdenes) -> Resultado {
         motivo: Some(MOTIVO_SIMULACION.to_string()),
         detalle: Some(detalle),
         gestos: hecho.gestos,
+        volcado: None,
+    }
+}
+
+/// `observar`: pide la foto y la devuelve tal cual, o nombra por que no.
+///
+/// `ok:true` aqui NO dice "se publico": dice "se miro y la foto esta en el
+/// resultado". Es la unica accion donde un `ok:true` es honesto sin
+/// postcondicion, porque lo que se pidio (el volcado) se tiene en la mano.
+fn atender_observar(orden: &Orden, mano: &mut dyn ManoDeOrdenes) -> Resultado {
+    let hecho = mano.observar();
+
+    match (hecho.ejecutado, hecho.volcado) {
+        (true, Some(volcado)) if !volcado.trim().is_empty() => Resultado {
+            id: orden.id.clone(),
+            accion: orden.accion.clone(),
+            red: orden.red.clone(),
+            ok: true,
+            simulacion: orden.simulacion,
+            motivo: None,
+            detalle: Some(hecho.detalle.unwrap_or_else(|| {
+                format!("volcado de la ventana activa: {} bytes", volcado.len())
+            })),
+            gestos: hecho.gestos,
+            volcado: Some(volcado),
+        },
+        (_, volcado) => {
+            let motivo = hecho.motivo.unwrap_or_else(|| MOTIVO_VOLCADO_AUSENTE.to_string());
+            let detalle = hecho.detalle.unwrap_or_else(|| match volcado {
+                Some(_) => "la mano dijo haber mirado y el volcado llego en blanco".to_string(),
+                None => "la mano dijo haber mirado y no trajo volcado".to_string(),
+            });
+            Resultado::fallo(
+                orden.id.clone(),
+                orden.accion.clone(),
+                orden.red.clone(),
+                orden.simulacion,
+                motivo,
+                detalle,
+            )
+        }
     }
 }
 

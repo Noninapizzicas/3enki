@@ -93,9 +93,13 @@
             android:layout_marginBottom="20dp"
             android:background="#22000000" />
 
-        <!-- El volcado de pantalla (19b): lo que permite escribir una receta con
-             los anclas REALES. OBSERVAR manda el JSON al bus; COPIAR lo deja en el
-             portapapeles para pegarlo en Telegram si el canal no esta. -->
+        <!-- El volcado de pantalla (19b), que desde 19c es solo DIAGNOSTICO: al
+             pulsar, esta app pasa a primer plano y Android solo deja leer la
+             ventana en primer plano, asi que lo que se vuelca es nuestra propia
+             pantalla. Para volcar Instagram esta la orden `observar` del bus. El
+             boton se queda porque sirve para comprobar que el volcado y el
+             portapapeles funcionan; COPIAR deja el JSON para pegarlo en Telegram
+             si el canal no esta. -->
         <Button
             android:id="@+id/boton_observar"
             android:layout_width="match_parent"
@@ -118,6 +122,15 @@
             android:layout_marginTop="20dp"
             android:text="@string/nota_inicial"
             android:textSize="13sp" />
+
+        <TextView
+            android:id="@+id/nota_volcado"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="12dp"
+            android:text="@string/nota_volcado_diagnostico"
+            android:textSize="12sp"
+            android:textStyle="italic" />
 
     </LinearLayout>
 </ScrollView>

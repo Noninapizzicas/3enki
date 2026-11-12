@@ -4,9 +4,20 @@
 //
 // Lo que hace: enseñar el estado del canal y del servicio de accesibilidad, dejar
 // teclear la URL y la llave del bus, arrancar/parar el servicio en primer plano,
-// abrir los ajustes de accesibilidad y OBSERVAR LA PANTALLA (bloque 19b): leer el
-// arbol real, serializarlo y mandarlo al bus, o copiarlo al portapapeles si el
-// bus no esta. Nada mas.
+// abrir los ajustes de accesibilidad y PROBAR EL VOLCADO (bloques 19b/19c): leer
+// el arbol, serializarlo y mandarlo al bus, o copiarlo al portapapeles si el bus
+// no esta. Nada mas.
+//
+// # Por que el boton NO es la forma de volcar Instagram (19c)
+//
+// Android solo deja leer el arbol de accesibilidad de la VENTANA EN PRIMER
+// PLANO. Al pulsar el boton, esta actividad pasa a primer plano, asi que lo que
+// se vuelca es NUESTRA pantalla. El boton se queda, renombrado a "PROBAR
+// VOLCADO (esta app)", porque sirve para diagnosticar (que el servicio este
+// vivo, que el JSON se componga, que el portapapeles funcione); para volcar
+// Instagram de verdad se manda la orden `observar` por el bus y la contesta
+// `BucleDeMano`, que corre sin que nadie toque el movil. La nota al pie de la
+// pantalla lo dice.
 //
 // # Lo que NO hace, a proposito
 //
@@ -22,7 +33,8 @@
 //   - NO arranca el canal al abrir la app. Abrir una pantalla no puede abrir dos
 //     canales con la misma llave.
 //   - NO mira la pantalla por su cuenta. El volcado se hace cuando el dueño
-//     pulsa el boton: espiar en bucle es otra cosa (y no es esta).
+//     pulsa el boton: espiar en bucle es otra cosa (y no es esta). El que mira
+//     "a peticion" desde el bus es `BucleDeMano`, y solo cuando llega una orden.
 //   - NO publica el volcado si el crate no esta: lo dice en pantalla y deja el
 //     JSON en el portapapeles. Un "no se pudo" sin salida obligaria a repetir el
 //     volcado, y el volcado es una foto que caduca.
@@ -115,9 +127,11 @@ class MainActivity : Activity() {
             abrirAjustesDeAccesibilidad()
         }
 
-        // El volcado (bloque 19b). Los dos botones comparten el mismo JSON: si
-        // el bus no lo quiere, se copia y se pega en Telegram, que es como se
-        // mira hoy una pantalla cuando el canal no esta.
+        // El volcado (bloques 19b/19c). Los dos botones comparten el mismo JSON:
+        // si el bus no lo quiere, se copia y se pega en Telegram, que es como se
+        // mira hoy una pantalla cuando el canal no esta. El de observar es un
+        // DIAGNOSTICO de esta app (ver la cabecera del fichero): el volcado de
+        // Instagram llega por la orden `observar` del bus.
         botonObservar = findViewById(R.id.boton_observar)
         botonObservar.setOnClickListener { observarPantalla() }
         botonCopiar = findViewById(R.id.boton_copiar)
@@ -198,10 +212,17 @@ class MainActivity : Activity() {
         }
     }
 
-    // ---- el volcado de pantalla (bloque 19b) ------------------------------
+    // ---- el volcado de pantalla (19b: diagnostico; 19c: el bus) -----------
 
     /**
-     * OBSERVAR PANTALLA: lee el arbol real, lo serializa y lo manda al bus.
+     * PROBAR VOLCADO: lee el arbol de ESTA pantalla, lo serializa y lo manda al
+     * bus.
+     *
+     * Es un diagnostico, no la via de produccion: al pulsar el boton, esta
+     * actividad esta en primer plano y Android solo deja leer la ventana en
+     * primer plano, asi que el arbol que sale es el nuestro (bloque 19c). Para
+     * volcar Instagram se manda `{"accion":"observar"}` al bus y lo contesta
+     * `BucleDeMano` sin tocar el aparato.
      *
      * Todo el trabajo pesado (recorrer 4000 nodos y montar el JSON) va en un
      * hilo aparte: en el hilo de la UI seria un ANR con una pantalla grande de

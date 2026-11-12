@@ -15,7 +15,7 @@
     <string name="boton_conectar">Conectar</string>
     <string name="boton_desconectar">Desconectar</string>
     <string name="boton_accesibilidad">Abrir ajustes de accesibilidad</string>
-    <string name="boton_observar">OBSERVAR PANTALLA</string>
+    <string name="boton_observar">PROBAR VOLCADO (esta app)</string>
     <string name="boton_copiar">COPIAR VOLCADO</string>
 
     <string name="estado_canal">Canal: %1$s</string>
@@ -26,6 +26,13 @@
     <string name="biblioteca_ausente">Libreria nativa: NO cargada. El APK se construyo sin jniLibs (compilacion del crate pendiente).</string>
 
     <string name="nota_inicial">La llave no se guarda en el aparato: se teclea en cada arranque y vive solo en memoria mientras el servicio esta vivo.</string>
+
+    <!-- Nota fija al pie (19c). El boton de volcado se queda como diagnostico,
+         pero NO sirve para volcar Instagram: al pulsarlo, la app pasa a primer
+         plano y Android solo deja leer la ventana en primer plano. La nota lo
+         dice para que nadie pierda una tarde escribiendo una receta con el
+         arbol de nuestra propia pantalla. -->
+    <string name="nota_volcado_diagnostico">PROBAR VOLCADO solo diagnostica: al pulsar, esta app pasa a primer plano y el volcado sale de ESTA pantalla, no de Instagram. Para volcar Instagram usa la orden observar desde el bus.</string>
     <string name="aviso_llave_no_se_guarda">Canal arrancando. La llave no se guarda en disco; si cierras la app, hay que volver a teclearla.</string>
 
     <string name="error_url_insegura">La URL tiene que empezar por wss://. El crate no abre un canal sin TLS, asi que un ws:// solo daria un error mas tarde y peor.</string>
@@ -42,7 +49,7 @@
     <string name="observar_no_enviado">volcado NO enviado (%1$s). Usa COPIAR VOLCADO y pegalo en Telegram.</string>
     <string name="observar_sin_leer">no se pudo leer la pantalla: %1$s</string>
     <string name="volcado_copiado">volcado copiado al portapapeles (%1$d nodos)</string>
-    <string name="volcado_nada">todavia no hay volcado: pulsa OBSERVAR PANTALLA primero</string>
+    <string name="volcado_nada">todavia no hay volcado: pulsa PROBAR VOLCADO primero</string>
 
     <!-- Notificacion del servicio en primer plano -->
     <string name="notificacion_canal_nombre">Canal del puente</string>

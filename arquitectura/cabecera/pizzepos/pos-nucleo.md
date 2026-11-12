@@ -16,7 +16,7 @@ fuentes:
   - modules/pizzepos/tarifas/**
   - modules/pizzepos/persistencia-comandero/**
   - modules/pizzepos/impresion/**
-verificado: 2026-11-10 (confirmacion-pedido v1.2: la espera tiene DOS tramos — a los 10 min un último mensaje amable «¿serías tan amable de confirmarnos el pedido?» y otros 10 min después se retira; la respuesta del cliente se acepta en los DOS shapes del bus —el de whatsapp-bot (`from`/`text`/`project_slug`) y el del puente Rust (`de`/`texto`/`slug`/`id`), sin el cual el «sí» se ignoraba en silencio—; pedidos retira pedido Y cuenta con `_retirarPedido` (también en el NO), notificador avisa a la barra con el mismo `pedido.sin_confirmar`) · 2026-11-10 (el segundo mensaje pide la confirmación con amabilidad) · 2026-11-07 (ubicación del cliente: pin opcional en el #P1, mapa del reparto al staff) · 2026-11-06 (entrega a domicilio: el modo 'domicilio' existe como MODO, no como canal — cuentas lo canoniza a 'llevar' para que nazca ticket que se cierra al cobrar y no cuenta huérfana; pedidos exige direccion_entrega y cliente_telefono en la puerta (400 sin ellos) y el comandero acepta notas_generales por parámetro para que el destino se imprima en el ticket de cocina)
+verificado: 2026-11-12 (trozos_: el botón del comandero abre una cuenta que es EXISTENCIA del mostrador, no venta — sin cobro, sin `cuenta.cerrada`, sin libro; el tipo sin strategy es deliberado; su pedido viaja a cocina por la puerta común y alimenta la franja del día de pantalla-tv) · 2026-11-10 (confirmacion-pedido v1.2: la espera tiene DOS tramos — a los 10 min un último mensaje amable «¿serías tan amable de confirmarnos el pedido?» y otros 10 min después se retira; la respuesta del cliente se acepta en los DOS shapes del bus —el de whatsapp-bot (`from`/`text`/`project_slug`) y el del puente Rust (`de`/`texto`/`slug`/`id`), sin el cual el «sí» se ignoraba en silencio—; pedidos retira pedido Y cuenta con `_retirarPedido` (también en el NO), notificador avisa a la barra con el mismo `pedido.sin_confirmar`) · 2026-11-10 (el segundo mensaje pide la confirmación con amabilidad) · 2026-11-07 (ubicación del cliente: pin opcional en el #P1, mapa del reparto al staff) · 2026-11-06 (entrega a domicilio: el modo 'domicilio' existe como MODO, no como canal — cuentas lo canoniza a 'llevar' para que nazca ticket que se cierra al cobrar y no cuenta huérfana; pedidos exige direccion_entrega y cliente_telefono en la puerta (400 sin ellos) y el comandero acepta notas_generales por parámetro para que el destino se imprima en el ticket de cocina)
 ---
 
 # PizzePOS Módulos — Subsistema de Punto de Venta (v3.2.0)
@@ -1199,6 +1199,16 @@ PATRON Multi-Tenant {
 > y su venta no llega al libro, que solo apunta en `cuenta.cerrada`. Por eso una cuenta
 > sin mesa ni ticket declara `cerrar_al_cobrar:true` y emite su `cuenta.cerrada` al
 > cobrarse (the-pirate 2026-10-30: 5 cobros 95,50 frente a un libro de 92,50).
+>
+> **LA EXCEPCIÓN DECLARADA: `trozos_` no es un canal, es EXISTENCIA (2026-11-12).** El botón
+> «Trozos» del comandero abre una cuenta `trozos_<8>` (símbolo `P` en `TIPOS_SIMBOLO`) que NO es
+> una venta: no se cobra, no emite `cuenta.cerrada` y por tanto no toca el libro. Es la orden de
+> producción de las pizzas que se venden al corte en el mostrador — el dinero entra trozo a trozo
+> por caja. Nace a propósito sin `cerrar_al_cobrar` y sin strategy de canal: aquí el tipo huérfano
+> no es un olvido, es la ley. Su pedido viaja a cocina por la puerta común
+> (`comandero.enviar_cocina` → `pedidos` → bridge) y `pantalla-tv` lo traduce a la franja del día:
+> solo prefijo `trozos_` (una venta de mesa o de llevar no son existencias del mostrador), solo la
+> fecha del negocio, suma dentro del día y descarta entero lo de ayer.
 
 ```json
 {

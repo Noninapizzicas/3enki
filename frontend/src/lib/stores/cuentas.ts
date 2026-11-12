@@ -20,7 +20,7 @@ import { subscribe as mqttSubscribe } from '$lib/ui-core';
 // TYPES
 // =============================================================================
 
-export type TipoCuenta = 'local' | 'delivery' | 'llevar' | 'glovo' | 'llevadoo';
+export type TipoCuenta = 'local' | 'delivery' | 'llevar' | 'glovo' | 'llevadoo' | 'trozos';
 export type EstadoCuenta = 'pendiente' | 'con_pedido' | 'en_preparacion' | 'listo' | 'entregado' | 'para_cobrar' | 'cobrado';
 export type EstadoCocinaItem = 'en_cocina' | 'preparando' | 'listo';
 
@@ -71,7 +71,8 @@ export const TIPO_COLORS: Record<TipoCuenta, string> = {
   delivery: '#f59e0b',
   llevar: '#22c55e',
   glovo: '#FF6B00',
-  llevadoo: '#f59e0b'
+  llevadoo: '#f59e0b',
+  trozos: '#0ea5e9'
 };
 
 export const TIPO_ICONS: Record<TipoCuenta, string> = {
@@ -79,7 +80,8 @@ export const TIPO_ICONS: Record<TipoCuenta, string> = {
   delivery: '🛵',
   llevar: '🥡',
   glovo: '🛵',
-  llevadoo: '🛵'
+  llevadoo: '🛵',
+  trozos: '🍕'
 };
 
 export const TIPO_LABELS: Record<TipoCuenta, string> = {
@@ -87,7 +89,8 @@ export const TIPO_LABELS: Record<TipoCuenta, string> = {
   delivery: 'Delivery',
   llevar: 'Llevar',
   glovo: 'Glovo',
-  llevadoo: 'Llevadoo'
+  llevadoo: 'Llevadoo',
+  trozos: 'Trozos'
 };
 
 // Mapeo de tipos de persistencia a tipos del store
@@ -99,7 +102,8 @@ const TIPO_MAP: Record<string, TipoCuenta> = {
   llevar: 'llevar',
   recoger: 'llevar',
   glovo: 'glovo',
-  llevadoo: 'llevadoo'
+  llevadoo: 'llevadoo',
+  trozos: 'trozos'
 };
 
 // Orden de progresión de estados (índice mayor = más avanzado)

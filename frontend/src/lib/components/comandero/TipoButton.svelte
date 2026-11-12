@@ -50,6 +50,12 @@
       } else if (tipo === 'llevadoo') {
         // Llevadoo → usa cuentas-canales llevadoo strategy (delivery externo)
         cuenta_id = await createLlevadoo(projectId);
+      } else if (tipo === 'trozos') {
+        // Trozos → cuenta del MOSTRADOR del día: las pizzas que se mandan a
+        // cocina desde aquí son las que se anuncian en la pantalla de la calle
+        // (el módulo pantalla-tv las escucha en comandero.enviar_cocina).
+        const cuenta = await createCuenta(projectId, 'trozos', 'Trozos');
+        cuenta_id = cuenta?.id || null;
       } else {
         // Delivery/otros → cuentas genérico
         const cuenta = await createCuenta(projectId, tipo);

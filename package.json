@@ -221,7 +221,7 @@
     "test:coherencia-canales": "node tests/unit/carta-digital__coherencia-canales.test.js",
     "test:aviso-pedido-listo": "node tests/unit/pizzepos__aviso-pedido-listo.test.js",
     "test:confirmacion-pedido": "node tests/unit/pizzepos__confirmacion-pedido.test.js",
-    "test:pantalla-tv": "node modules/pantalla-tv/test/construir.test.js && node modules/pantalla-tv/test/modulo.test.js"
+    "test:pantalla-tv": "node modules/pantalla-tv/test/construir.test.js && node modules/pantalla-tv/test/modulo.test.js && node modules/pantalla-tv/test/trozos.test.js"
   },
   "keywords": [
     "event-driven",

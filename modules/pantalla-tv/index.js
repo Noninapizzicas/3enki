@@ -32,6 +32,7 @@ const ModuloHibridoReflejo = require('../_shared/modulo-hibrido-reflejo');
 const ResolutorProyecto = require('../_shared/resolutor-proyecto');
 const { construir, hoyEn } = require('./construir');
 const { desdeAprobadas } = require('./fuentes/promos');
+const { esCuentaDeTrozos, documentoDeTrozos } = require('./fuentes/trozos');
 const { proyectarCartaPublica, normalizarTelefono } = require('../pizzepos/carta-digital/proyeccion');
 
 const REBOTE_MS = 4000;              // una edición de carta emite N eventos; se hornea una vez
@@ -74,6 +75,53 @@ class PantallaTvReflejo extends ModuloHibridoReflejo {
   onPromosCambiadas(e) { this._programar(e, 'promos'); }
   onCalendarioMarketing(e) { this._programar(e, 'promos'); }
   onRepublicada(e) { this._programar(e, 'cartadigital.publicado'); }
+
+  // ── el mostrador de trozos: el dueño manda las pizzas a cocina ──────────
+  // La cuenta `trozos_*` ES la lista de lo que hay al corte: lo que el dueño
+  // manda a cocina desde el comandero es lo que se anuncia en la calle. Es el
+  // único camino que escribe `pizzepos/porciones.json` — una venta de mesa o de
+  // llevar NO toca la franja, porque son ventas y no existencias del mostrador.
+  // La traducción pedido → documento es pura (fuentes/trozos.js); aquí solo se
+  // lee, se escribe por el bus y se rehace la pantalla.
+  async onTrozosEnviados(e) {
+    const d = (e && e.data) || e || {};
+    const { cuenta_id, project_id, items } = d;
+    if (!project_id || !esCuentaDeTrozos(cuenta_id)) return;
+
+    try {
+      const cableado = await this._leer(project_id, 'pantalla-tv/cableado.json');
+      if (!cableado) return;   // proyecto sin pantalla: no hay dónde anunciarlo
+
+      const servicio = (await this._leer(project_id, 'pizzepos/servicio/config.json')) || {};
+      const hoy = hoyEn(servicio.zona_horaria);
+      const previo = await this._leer(project_id, 'pizzepos/porciones.json');
+      const cfg = cableado.porciones || {};
+
+      const doc = documentoDeTrozos({
+        items, hoy, previo,
+        precio_porcion: cfg.precio_porcion,
+        bundle: cfg.bundle,
+        cuenta_id
+      });
+      if (!doc) return;        // nada que anunciar: la franja se queda como está
+
+      const w = await this._rpc('fs.write.request', {
+        project_id, path: 'pizzepos/porciones.json',
+        content: JSON.stringify(doc, null, 2), encoding: 'utf-8', atomic: true
+      });
+      if (!w || (w.status && w.status >= 400)) {
+        this.logger?.warn('pantalla-tv.trozos.no-escribe', { project_id, cuenta_id });
+        return;
+      }
+
+      this.logger?.info('pantalla-tv.trozos', {
+        project_id, cuenta_id, fecha: doc.fecha, pizzas: doc.pizzas.length
+      });
+      this._programar({ project_id }, 'trozos');
+    } catch (err) {
+      this.logger?.warn('pantalla-tv.trozos.fallida', { project_id, error: err.message });
+    }
+  }
 
   // ── la puerta manual (verificar, forzar, recuperar tras un reinicio) ────
   onConstruirRequest(e) {

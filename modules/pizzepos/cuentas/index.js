@@ -75,7 +75,8 @@ class CuentasModule extends BaseModule {
     whatsapp: 'W',
     glovo: 'G',
     delivery: 'D',
-    llevadoo: 'V'
+    llevadoo: 'V',
+    trozos: 'P'
   };
 
   // Un CANAL es un prefijo con dueño: cuentas-canales detecta la strategy por

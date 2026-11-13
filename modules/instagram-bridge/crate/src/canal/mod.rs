@@ -29,6 +29,10 @@
 //!     bus. Es un puente TONTO a proposito: envuelve el JSON que le dan y no lo
 //!     parsea, porque un volcado transformado ya no es lo que el aparato vio.
 //!     Lleva un buzon para que el hilo de la UI de Android no toque la red.
+//!   - `reconexion` (bloque 19e): la politica de reintento —espera creciente con
+//!     tope de 60 s— y el vocabulario del estado `reconectando`. Rust puro y sin
+//!     reloj: decide *cuanto* esperar, no duerme. Distingue la caida de la
+//!     parada deliberada por un VALOR, no adivinando el estado.
 //!
 //! # Lo que el canal NO hace
 //!
@@ -37,17 +41,21 @@
 //!   - No guarda la llave. La llave viaja en la URL (`wss://.../mqtt?k=<llave>`)
 //!     y se pasa por argumento: el crate no la escribe en ningun sitio, ni en
 //!     logs. Un canal que loguea su URL loguea la llave.
-//!   - No reintenta ni reconecta: eso es politica y vive fuera de aqui.
+//!   - No reintenta ni reconecta por su cuenta: la politica (cuanto esperar y
+//!     cuando rendirse) es de `reconexion`, y quien la ejecuta es el hilo del
+//!     borde (`jni`), que es el unico que sabe si la parada la pidio el dueno.
 
 pub mod bucle;
 pub mod json;
 pub mod mqtt;
 pub mod observacion;
 pub mod paso;
+pub mod reconexion;
 
 pub use bucle::{
     atender, servir, Bus, HechoDeMano, ManoAusente, ManoDeOrdenes, Opcion, Orden, Resultado,
     ACCIONES, ACCION_OBSERVAR, ACCION_PASO, ACCION_PUBLICAR,
 };
 pub use paso::{AnclaDePaso, GestoDePaso, Paso};
+pub use reconexion::{Decision, Desenlace, Reconexion, Reintento};
 pub use mqtt::{url_con_llave, Canal, FalloDeCanal, Framer};

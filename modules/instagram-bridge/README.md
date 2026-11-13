@@ -1196,7 +1196,174 @@ Lo que **no** se puede verificar en este servidor: que Kotlin compile (no hay
 manda. Eso lo dice el primer paso de verdad: se publica la orden de arriba con
 Instagram en primer plano y se lee el `detalle` del resultado.
 
+## Bloque 19e · Que el canal se levante solo
+
+El canal se caia y **no volvia**. Dos causas, y las dos habia que arreglar:
+
+  - **A · la llave vivia solo en memoria.** La URL y la llave se tecleaban, se
+    pasaban al servicio como extras del `Intent` y morian con el proceso. MIUI mata
+    el proceso al abrir Instagram, asi que cada prueba empezaba con el dueno
+    escribiendo la llave a mano.
+  - **B · nadie reintentaba.** Si se caia la red o el broker, el hilo del crate
+    terminaba y el canal se quedaba muerto hasta que alguien pulsaba CONECTAR. El
+    estado (`error:transporte`) era honesto y completamente inutil.
+
+### 1 · La llave, cifrada en el llavero del aparato
+
+`android/app/src/main/java/online/enki/instagram/Credenciales.kt`
+
+```kotlin
+Credenciales.de(contexto).guardar(url, llave)   // cifra y escribe
+Credenciales.de(contexto).leer()                // Par(url, llave) o null
+Credenciales.de(contexto).olvidar()             // borra el dato y la clave
+```
+
+**Se usa el Keystore directo y NO `androidx.security:security-crypto`.** El bloque
+dejaba esa puerta abierta y se ha cruzado, por tres razones:
+
+  1. **Cero dependencias nuevas.** `security-crypto` 1.1.0-alpha06 arrastra Tink y
+     su proveedor, y este APK se compila en un servidor sin Android SDK: aqui no se
+     puede comprobar que resuelva ni que su version alpha conviva con
+     `compileSdk 35`. Un build rojo por una caja que solo envuelve lo que ya trae el
+     sistema es un mal cambio, y el sintoma llegaria en el movil, no aqui.
+  2. **Hacen falta dos secretos, no un almacen.** `EncryptedSharedPreferences` por
+     debajo es lo mismo: AES con la clave en `AndroidKeyStore`. Aqui son cincuenta
+     lineas legibles (AES-256-GCM, IV aleatorio por escritura, etiqueta de 128 bits,
+     Base64 en `SharedPreferences` privadas) en vez de una caja que hay que auditar.
+  3. **Se puede leer entero y discutirlo.** Si algun dia hay que cambiarlo, el
+     cifrado esta a la vista.
+
+Lo que se guarda es **un solo blob** (`version:iv:datos`) con la url y la llave
+juntas: dos entradas separadas se pueden quedar a medias (url de un bus con la llave
+de otro) y el sintoma es un `401` que nadie sabe explicar. La clave se crea con
+`setUserAuthenticationRequired(false)`: el servicio en primer plano tiene que poder
+leerla con la pantalla apagada; pedir huella seria pedirle al dueno que desbloquee
+el movil para que el canal se levante solo, que es lo contrario de este bloque.
+
+En la pantalla: al pulsar CONECTAR se guarda **antes** de arrancar el servicio; al
+abrir la app los dos campos se rellenan de lo guardado (vacios si no hay nada, la
+pantalla no inventa una llave); y **OLVIDAR LLAVE** borra la credencial y la clave.
+El modo de fallo esta escrito: si la clave del llavero se invalida (restauracion de
+una copia, borrado del llavero por el sistema) el dato queda ilegible para siempre,
+`leer()` lo detecta, **lo borra** y devuelve `null` con motivo. Un dato que no se
+puede descifrar no es una credencial: es basura que hace creer que hay llave.
+
+En el servicio: si el `Intent` no trae url y llave (el sistema rearranca el servicio
+con `intent == null`), se leen del llavero. Por eso `onStartCommand` devuelve
+`START_STICKY` desde este bloque: antes volver sin llave solo levantaba una
+notificacion vacia, ahora hay con que volver. `onStartCommand` con `ACCION_PARAR`
+sigue devolviendo `START_NOT_STICKY`.
+
+### 2 · La reconexion automatica
+
+`crate/src/canal/reconexion.rs` (politica, Rust puro) + el bucle de
+`crate/src/jni/mod.rs` (quien la ejecuta).
+
+```text
+intento   1    2    3    4    5     6     7     8+   (sin tope)
+espera    1s   2s   4s   8s   16s   30s   60s   60s
+```
+
+Un reintento inmediato contra un broker caido es un bucle que gasta bateria y llena
+el log; una espera de un minuto desde el primer intento deja el canal muerto un
+minuto por un corte de tres segundos. La escalera empieza rapido y se frena, y no
+tiene un "demasiados intentos": un canal que se rinde es un canal que hay que
+levantar a mano.
+
+**Caida contra parada deliberada.** No se adivina mirando el estado: viaja como un
+valor (`Desenlace::ParadaDeliberada` contra `Desenlace::Caida`). La bandera `parada`
+la pone `parar()` (el `detener` de Kotlin, que llega del boton DESCONECTAR o de
+`onDestroy`) y solo entonces; con ella puesta el hilo sale con `desconectado` y no
+vuelve. Adivinar la diferencia es como se acaba con un servicio que el dueno no
+puede apagar.
+
+**El contador se reinicia con un canal sano.** Si el canal aguanto mas de 60 s
+(`DURACION_QUE_REINICIA_S`), la caida vuelve a contar como intento 1: un corte
+despues de una hora de servicio no es el noveno intento de la misma averia. Si se
+cae a los dos segundos de conectar, el contador sigue subiendo: eso es un canal que
+no vale, y martillear el bus cada segundo es lo que hace que el broker cierre la
+puerta.
+
+**Al volver se vuelve a suscribir.** `bucle::servir` se suscribe EL MISMO a
+`core/core-a/events/bridge/orden/#` en su primera linea, asi que cada vuelta del
+bucle entra por ahi y deja un canal nuevo **con su suscripcion nueva**. Reconectar
+el socket no basta: el CONNECT de este cliente va con `Clean Session`, el broker no
+recuerda la suscripcion, y el resultado seria un canal mudo que parece conectado.
+El test `cada_conexion_nueva_vuelve_a_suscribirse` lo fija.
+
+**La espera se puede cortar.** Duerme en rebanadas de 250 ms mirando la bandera:
+`detener` espera como mucho 3 s (`PLAZO_PARADA`) y un hilo dormido 60 s no llegaria
+ni a la primera vuelta.
+
+### El estado dice la verdad (cinco valores, no cuatro)
+
+```text
+desconectado   no hay hilo (o lo paro el dueno)
+conectando     hay hilo, primer intento, todavia sin CONNACK
+conectado      CONNACK aceptado y suscripcion concedida
+reconectando   se cayo y esta volviendo: intento N, proximo en X s
+error:<codigo> el canal no esta y no va a volver solo
+```
+
+`reconectando` es el valor nuevo. Lleva dos campos numericos que solo existen en ese
+estado (`intento`, `proximo_en_s`) y el `motivo` del fallo que lo provoco. La notificacion
+del servicio los cuenta (`Canal: reconectando · intento 3 · proximo en 4 s`): decir
+"reconectando" a secas se lee como un canal caido que no vuelve, que es lo contrario.
+
+### Lo que este bloque NO hace
+
+  - **No arranca en el boot del aparato.** `RECEIVE_BOOT_COMPLETED` sigue sin
+    receptor: Android 12+ restringe el arranque de servicios en primer plano desde
+    BOOT_COMPLETED, y un arranque a medias es peor que uno que el dueno pide. Lo que
+    si se cubre es la muerte del proceso (`START_STICKY`), que es el caso de MIUI.
+  - **No guarda nada en claro.** Ni en preferencias, ni en el log, ni en la
+    notificacion. Si el cifrado falla, `guardar()` contesta `false` con motivo y NO
+    cae a un `putString` "provisional".
+  - **No abre dos canales.** El anterior se cierra antes de esperar, asi que el
+    broker nunca ve dos sesiones con el mismo client id.
+  - **No reintenta una orden.** Un PUBLISH de resultado en QoS 0 no tiene acuse y un
+    reintento ciego duplicaria resultados. Lo que se reintenta es la CONEXION.
+
+### Verificacion del bloque (real, en este servidor)
+
+```bash
+cd modules/instagram-bridge/crate
+cargo test --offline
+# 97 pasan, 0 fallan, 1 ignorado (antes del bloque: 90)
+#   reconexion   5  (espera_creciente_tope_60s · parada_deliberada_no_reintenta ·
+#                    caida_si_reintenta · el_estado_dice_reconectando_con_intento ·
+#                    cada_conexion_nueva_vuelve_a_suscribirse)
+#   reconexion   2  (en linea, en el modulo: la escalera y la parada)
+#   resto       90
+
+for f in ../tests/*.test.js; do node "$f" >/dev/null || echo "FALLO $f"; done
+# 52 suites JS OK
+```
+
+Los tests **tienen dientes** comprobado aqui, no de palabra:
+
+  - `Decision::Parar` por `Reintentar` en la rama de la parada ->
+    `parada_deliberada_no_reintenta` **falla** (el movil no se podria apagar);
+  - la escalera dejada plana en 1 s -> `espera_creciente_tope_60s` y
+    `caida_si_reintenta` **fallan** (dos reintentos por segundo contra un broker
+    caido);
+  - `intento_anterior.saturating_add(1)` cambiado por `1` -> `caida_si_reintenta`
+    **falla** (el contador no sube y la espera nunca crece);
+  - se restaura y vuelven a pasar (97, 0 fallos).
+
+El modulo `jni` (que es `cfg(target_os = "android")`) **compila** sin NDK: se copio
+el crate a un directorio de trabajo, se le añadio la caja `jni` como dependencia de
+escritorio, se quitaron los `cfg` de `jni` y `mano::android` -> `cargo check
+--offline --all-targets` limpio, sin warnings. Eso comprueba los tipos del borde
+(`Estado::Reconectando`, `esperar_con_parada`, el bucle), que es donde un error se
+paga en el movil.
+
+Lo que **no** se puede verificar en este servidor: que Kotlin compile (no hay
+`kotlinc` ni Android SDK) y que el Keystore del movil concrete. Eso lo dice el
+workflow, que compila el APK en cada push, y el primer arranque en el aparato.
+
 ## Tests
+
 
 Un fichero por pieza, con el nombre que fija la espina `enki-plan` del plan
 (`tests/<pieza>.test.js :: <nombre del test>`):
@@ -1267,6 +1434,10 @@ cd modules/instagram-bridge/crate && cargo test --offline   # U1, A4.2, A1, A3, 
     Son los que protegen la trampa 3.
   - `crate/tests/canal_integracion.rs` — `#[ignore]`: contra el bus real, **solo
     se suscribe** y comprueba CONNACK + SUBACK + PINGRESP. No publica nada.
+  - `crate/tests/reconexion.rs` (bloque 19e) — **puros, sin red**: la escalera de
+    esperas con su tope de 60 s, que una parada deliberada no reintenta, que una
+    caida si (y sin credenciales no), que el estado dice `reconectando` con su
+    intento, y que cada conexion nueva vuelve a suscribirse a `orden/#`.
 
 Los tests del padron, del catalogo, de la memoria de cambios, de la cola, de la
 tolerancia, de la autonomia y de la ficha no tocan los ficheros del repo: cada prueba de disco se hace en un directorio temporal propio

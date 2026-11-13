@@ -75,9 +75,15 @@
 //!     que se cruza con una espera es un interbloqueo, y un `GlobalRef` a un
 //!     servicio que Android reciclo es un proceso muerto dentro de un
 //!     `extern "system"`.
-//!   - **No reconecta.** Un canal caido se queda caido y el estado lo dice. Dos
-//!     canales con la misma llave y el mismo client id hacen que el broker cierre
-//!     el primero, y el sintoma es "conecta y se cae" sin motivo.
+//!   - **No reconecta por su cuenta, pero SI vuelve** (bloque 19e). El hilo del
+//!     canal es un bucle: si el canal se cae, consulta la politica de
+//!     `canal::reconexion` (espera creciente 1, 2, 4, 8, 16, 30, 60, 60... sin
+//!     tope), espera de forma cortable y vuelve a entrar por `bucle::servir`, que
+//!     reabre el canal y **se vuelve a suscribir** a `orden/#` en su primera
+//!     linea. Nunca hay dos canales a la vez (el anterior se cierra antes de
+//!     esperar), asi que el broker no ve dos sesiones con el mismo client id.
+//!     La unica cosa que NO hace es reintentar una parada deliberada: la bandera
+//!     `parada` la pone `parar()` y solo entonces, no se deduce del estado.
 //!   - **No abre un segundo canal.** Si ya hay uno vivo, `iniciar` contesta
 //!     `JNI_FALSE` con motivo `ya_hay_canal`: se para primero (`detener`) y
 //!     despues se abre, que es lo que ya hace `ServicioEnki`.
@@ -91,7 +97,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::{self, Receiver, TryRecvError};
 use std::sync::{Arc, Mutex, MutexGuard, OnceLock};
 use std::thread::JoinHandle;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use jni::objects::{JObject, JString};
 use jni::sys::{jboolean, jlong, JNI_FALSE, JNI_TRUE};
@@ -101,6 +107,7 @@ use crate::canal::bucle::{self, Bus, Opcion};
 use crate::canal::json::Valor;
 use crate::canal::mqtt::{self, url_con_llave, Canal, FalloDeCanal};
 use crate::canal::observacion::{self, FalloDeObservacion};
+use crate::canal::reconexion::{self, Reconexion};
 use crate::mano::android::{cola, ManoAndroid};
 use crate::mano::cola::TipoDePeticion;
 use crate::VERSION;
@@ -124,21 +131,28 @@ fn cliente_id() -> String {
 // El estado (lo que Kotlin lee)
 // ---------------------------------------------------------------------------
 
-/// Lo que el canal puede decir de si mismo. Cuatro valores y ninguno mas.
+/// Lo que el canal puede decir de si mismo. Cinco valores y ninguno mas.
 ///
 /// `Error` lleva **codigo** (el `codigo()` de `FalloDeCanal`, sin tildes) y
 /// **detalle** (la frase para una persona): el codigo es lo que viaja como
 /// `error:<codigo>` y lo que se puede comparar; el detalle es lo que el dueno lee
 /// en la notificacion.
+///
+/// `Reconectando` (bloque 19e) es el estado que antes no existia y que es la
+/// diferencia entre un canal caido y un canal que esta volviendo: lleva el
+/// intento, lo que falta para el siguiente y el fallo que lo provoco. NO es
+/// `conectado` (no hay enlace) ni `desconectado` (hay un hilo trabajando).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Estado {
-    /// No hay hilo de canal. Es el estado de arranque y el que queda al parar.
+    /// No hay hilo de canal, o el dueno lo paro. Es el estado de arranque.
     Desconectado,
-    /// Hay hilo y todavia no hay CONNACK.
+    /// Hay hilo y todavia no hay CONNACK (primer intento o reintento).
     Conectando,
     /// CONNACK aceptado y suscripcion concedida.
     Conectado,
-    /// El canal no esta, con su motivo.
+    /// Se cayo y se esta esperando para volver: intento N, proximo en X s.
+    Reconectando(Reconexion),
+    /// El canal no esta y no va a volver solo, con su motivo.
     Error { codigo: String, detalle: String },
 }
 
@@ -150,6 +164,10 @@ impl Estado {
             Estado::Desconectado => "desconectado".to_string(),
             Estado::Conectando => "conectando".to_string(),
             Estado::Conectado => "conectado".to_string(),
+            // El texto no se escribe aqui: vive en `canal::reconexion` junto a los
+            // campos `intento`/`proximo_en_s`, para que el contrato con la
+            // notificacion de Android se escriba una sola vez.
+            Estado::Reconectando(progreso) => progreso.texto().to_string(),
             Estado::Error { codigo, .. } => format!("error:{codigo}"),
         }
     }
@@ -158,6 +176,9 @@ impl Estado {
     pub fn motivo(&self) -> Option<&str> {
         match self {
             Estado::Error { detalle, .. } => Some(detalle.as_str()),
+            // Mientras se reconecta, el motivo es el fallo que lo provoco: sin el,
+            // la notificacion diria "reconectando" y nadie sabria por que.
+            Estado::Reconectando(progreso) => Some(progreso.motivo.as_str()),
             _ => None,
         }
     }
@@ -257,39 +278,115 @@ fn hilo_canal(url: String, llave: String, parada: Arc<AtomicBool>) {
     }
 }
 
-/// El canal de verdad: conectar, servir ordenes hasta que se pida parar, cerrar.
+/// Cuanto se duerme de una tirada mientras se espera para reconectar.
+///
+/// La espera se parte en rebanadas para que una parada no tenga que aguantar los
+/// 60 s del ultimo escalon: `detener` espera como mucho `PLAZO_PARADA` (3 s), y
+/// un hilo dormido 60 s no llega ni a la primera vuelta.
+const REBANADA_DE_ESPERA: Duration = Duration::from_millis(250);
+
+/// Espera `total`, dejando de esperar en cuanto se pida la parada.
+///
+/// `false` = se pidio parar (o se pidio mientras se dormia). Un `true` significa
+/// que la espera se consumio entera y toca intentarlo otra vez.
+fn esperar_con_parada(parada: &AtomicBool, total: Duration) -> bool {
+    let limite = Instant::now() + total;
+    loop {
+        if parada.load(Ordering::SeqCst) {
+            return false;
+        }
+        let restante = limite.saturating_duration_since(Instant::now());
+        if restante.is_zero() {
+            return true;
+        }
+        std::thread::sleep(restante.min(REBANADA_DE_ESPERA));
+    }
+}
+
+/// El canal de verdad: conectar, servir ordenes, y **volver solo** si se cae
+/// (bloque 19e).
+///
+/// El bucle es el mismo para el primer intento y para los reintentos, y eso es
+/// a proposito: un reintento que abriera el canal por otro camino no se
+/// suscribiria igual. `bucle::servir` se suscribe EL MISMO a `TOPIC_ORDENES` en su
+/// primera linea, asi que cada vuelta de este `loop` deja un canal nuevo con su
+/// suscripcion nueva: reconectar el socket no basta (el broker no recuerda la
+/// suscripcion de una sesion limpia), y por eso se vuelve a entrar por `servir`.
+///
+/// La parada se mira en TRES sitios y todos son necesarios: antes de intentar
+/// (no abrir un canal que ya nadie quiere), justo despues de que `servir` salga
+/// (una caida y una parada se parecen mucho desde fuera: `servir` devuelve `Ok`
+/// cuando la bandera dice `Cerrado`) y durante la espera. La diferencia la marca
+/// la bandera `parada`, que solo pone `parar()`: es un hecho, no una deduccion.
 fn servir_canal(url: &str, llave: &str, parada: &Arc<AtomicBool>) {
     let destino = url_con_llave(url, llave);
+    let mut intento: u64 = 0;
 
-    let canal = match Canal::conectar(&destino, &cliente_id()) {
-        Ok(canal) => canal,
-        Err(e) => {
-            marcar(Estado::Error { codigo: e.codigo().to_string(), detalle: e.descripcion() });
+    loop {
+        // 1 · una parada pedida antes de conectar no abre nada.
+        if parada.load(Ordering::SeqCst) {
+            marcar(Estado::Desconectado);
             return;
         }
-    };
 
-    // `servir` se suscribe el mismo (a `bucle::TOPIC_ORDENES`), valida contra el
-    // catalogo cerrado y contesta SIEMPRE con el par `{ok, motivo}`. No se
-    // reimplementa aqui: la validacion y el par de fallo son los mismos que usa
-    // el CLI de escritorio, y por eso valen igual en el movil.
-    let mut bus = BusConParada::nuevo(canal, parada.clone());
-    // La mano del aparato (bloque 19a). Mira y toca por la cola; si Kotlin no
-    // contesta, cada peticion caduca con `mano_sin_respuesta`.
-    let mut mano = ManoAndroid::nueva();
-    let desenlace = bucle::servir(&mut bus, &mut mano, None);
-    bus.desconectar();
+        marcar(Estado::Conectando);
+        let arranque = Instant::now();
 
-    match desenlace {
-        Ok(_resumen) => marcar(Estado::Desconectado),
-        Err(e) => {
-            // Si la parada la pedimos nosotros, el estado final es
-            // `desconectado`: un error de transporte al cerrar no es un fallo
-            // que el dueno tenga que ver.
-            if parada.load(Ordering::SeqCst) {
-                marcar(Estado::Desconectado);
-            } else {
-                marcar(Estado::Error { codigo: e.codigo().to_string(), detalle: e.descripcion() });
+        let desenlace = match Canal::conectar(&destino, &cliente_id()) {
+            Ok(canal) => {
+                // `servir` valida contra el catalogo cerrado, contesta SIEMPRE con
+                // el par `{ok, motivo}` y se suscribe el mismo. No se reimplementa
+                // aqui: la validacion es la misma que la del CLI de escritorio.
+                let mut bus = BusConParada::nuevo(canal, parada.clone());
+                // La mano del aparato (bloque 19a). Mira y toca por la cola; si
+                // Kotlin no contesta, cada peticion caduca con `mano_sin_respuesta`.
+                let mut mano = ManoAndroid::nueva();
+                let resultado = bucle::servir(&mut bus, &mut mano, None);
+                bus.desconectar();
+                resultado
+            }
+            Err(e) => Err(e),
+        };
+
+        // 2 · parada deliberada: ni un reintento mas. El estado final es
+        // `desconectado` (no un error): un cierre pedido no es un fallo que el
+        // dueno tenga que ver.
+        if parada.load(Ordering::SeqCst) {
+            marcar(Estado::Desconectado);
+            return;
+        }
+
+        // Un `Ok` sin parada significa que el bus se cerro por su cuenta (el
+        // `Opcion::Cerrado` del bucle): es una caida, y se nombra como tal.
+        let fallo = desenlace.err().unwrap_or(FalloDeCanal::Cerrado);
+        let conectado_s = arranque.elapsed().as_secs();
+
+        match reconexion::decidir(reconexion::Desenlace::Caida, intento, conectado_s, true) {
+            // `Parar` solo puede pasar sin credenciales, y aqui siempre las hay
+            // (se comprobaron en `arrancar`). Se atiende igual: un camino que no
+            // existe no se escribe como si existiera, pero tampoco se deja sin
+            // salida.
+            reconexion::Decision::Parar(motivo) => {
+                marcar(Estado::Error {
+                    codigo: motivo.to_string(),
+                    detalle: fallo.descripcion(),
+                });
+                return;
+            }
+            reconexion::Decision::Reintentar(reintento) => {
+                intento = reintento.intento;
+                // El estado dice la VERDAD de lo que esta pasando: hay un hilo
+                // vivo, no hay enlace, se esta esperando, y se sabe cuanto.
+                marcar(Estado::Reconectando(Reconexion::nueva(
+                    reintento.intento,
+                    reintento.espera_s,
+                    fallo.descripcion(),
+                )));
+                // 3 · la espera, cortable: el dueno puede cambiar de idea.
+                if !esperar_con_parada(parada, Duration::from_secs(reintento.espera_s)) {
+                    marcar(Estado::Desconectado);
+                    return;
+                }
             }
         }
     }
@@ -473,11 +570,15 @@ fn parar() {
 /// El estado como JSON con la forma que ya lee `ServicioEnki.kt`:
 /// `{"canal":"...","motivo":...,"version":"...","mano":"...","cola":{...},"volcado":{...}}`.
 ///
-/// La clave `canal` lleva **exactamente** uno de los cuatro valores del contrato
-/// (`desconectado`, `conectando`, `conectado`, `error:<codigo>`). Se devuelve
-/// como JSON y no como texto pelado porque los dos consumidores de Kotlin
-/// (`PuenteNativo.leerMotivo` y `ServicioEnki.leerCampo`) leen claves: un texto
-/// pelado perderia el motivo del fallo justo cuando hace falta.
+/// La clave `canal` lleva **exactamente** uno de los cinco valores del contrato
+/// (`desconectado`, `conectando`, `conectado`, `reconectando`, `error:<codigo>`).
+/// Se devuelve como JSON y no como texto pelado porque los dos consumidores de
+/// Kotlin (`PuenteNativo.leerMotivo` y `ServicioEnki.leerCampo`) leen claves: un
+/// texto pelado perderia el motivo del fallo justo cuando hace falta.
+///
+/// `intento` y `proximo_en_s` (bloque 19e) solo aparecen en `reconectando`, y son
+/// numeros porque la notificacion los cuenta ("intento 3, proximo en 4 s"), no los
+/// busca dentro de una frase.
 ///
 /// `mano` dice QUE mano esta enganchada al bucle (`android` en el movil) y
 /// `cola` cuenta lo que la cola tiene entre manos: si `pendientes` crece y no
@@ -489,20 +590,29 @@ fn parar() {
 /// `publicarObservacion` solo puede contestar un booleano: sin esta clave, un
 /// "no" del borde no tendria explicacion en ningun sitio que el dueno pueda leer.
 fn leer_estado() -> String {
-    let guard = cerrojo();
-    let canal = guard.estado.como_texto();
-    let motivo = match guard.estado.motivo() {
-        Some(detalle) => Valor::texto(detalle),
-        None => Valor::Nulo,
+    let (canal, motivo, progreso) = {
+        let guard = cerrojo();
+        let canal = guard.estado.como_texto();
+        let motivo = match guard.estado.motivo() {
+            Some(detalle) => Valor::texto(detalle),
+            None => Valor::Nulo,
+        };
+        // `intento` y `proximo_en_s` solo existen mientras se reconecta: un canal
+        // conectado no tiene "intento 3" que enseñar, e inventarlo seria un dato
+        // que no significa nada.
+        let progreso = match &guard.estado {
+            Estado::Reconectando(en_curso) => Some(en_curso.campos()),
+            _ => None,
+        };
+        (canal, motivo, progreso)
     };
-    drop(guard);
 
     let (pendientes, en_vuelo, huerfanas) = {
         let la_cola = cola();
         (la_cola.pendientes(), la_cola.en_vuelo(), la_cola.huerfanas())
     };
 
-    Valor::objeto(vec![
+    let mut campos = vec![
         ("canal", Valor::texto(canal)),
         ("motivo", motivo),
         ("version", Valor::texto(VERSION)),
@@ -516,8 +626,12 @@ fn leer_estado() -> String {
             ]),
         ),
         ("volcado", nota_de_volcado()),
-    ])
-    .a_texto()
+    ];
+    if let Some(progreso) = progreso {
+        campos.extend(progreso);
+    }
+
+    Valor::objeto(campos).a_texto()
 }
 
 // ---------------------------------------------------------------------------

@@ -21,9 +21,12 @@
 //
 // # Lo que NO hace, a proposito
 //
-//   - NO guarda la llave. Se escribe, se pasa al servicio como extra del `Intent`
-//     y se borra el campo. La URL si se recuerda: no es un secreto y tener que
-//     teclearla en cada arranque solo invita a guardarla en un papel.
+//   - NO guarda la llave EN CLARO, y desde el bloque 19e LA GUARDA CIFRADA. El
+//     boton CONECTAR deja la url y la llave en el llavero del aparato
+//     (`Credenciales.kt`: AES-256-GCM con la clave en `AndroidKeyStore`), y al
+//     abrir la app los campos se rellenan de ahi. OLVIDAR LLAVE las borra. Antes
+//     de este bloque no se guardaba nada y Android, que mata el proceso cuando le
+//     hace falta memoria, obligaba a teclearla a mano cada vez.
 //   - NO decide ni interpreta el estado. Lo que enseña es la cadena del crate
 //     (`PuenteNativo.estadoSeguro()` via `ServicioEnki`). Si dice
 //     `sin_borde_jni`, es que el crate no exporta el simbolo, y se dice tal cual.
@@ -67,9 +70,13 @@ import android.widget.TextView
 class MainActivity : Activity() {
 
     companion object {
-        /** Donde se recuerda la URL (nunca la llave). */
-        private const val PREFERENCIAS = "puente"
-        private const val CLAVE_URL = "url"
+        /**
+         * Las preferencias de la version anterior, donde la URL se guardaba EN
+         * CLARO. No se usan para nada: se borran al arrancar (ver `onCreate`) para
+         * que no quede un resto legible con `adb`.
+         */
+        private const val PREFERENCIAS_ANTIGUAS = "puente"
+        private const val CLAVE_URL_ANTIGUA = "url"
 
         /** Cada cuanto se repinta el estado. */
         private const val CADENCIA_DE_REFRESCO_MS = 2_000L
@@ -86,6 +93,12 @@ class MainActivity : Activity() {
     private lateinit var nota: TextView
     private lateinit var botonObservar: Button
     private lateinit var botonCopiar: Button
+
+    /**
+     * Las credenciales cifradas (bloque 19e). Una sola instancia por actividad:
+     * `de()` mete el contexto de la aplicacion, asi que no retiene la pantalla.
+     */
+    private val credenciales by lazy { Credenciales.de(this) }
 
     /**
      * El ultimo volcado que se tomo, para el boton de copiar.
@@ -116,13 +129,31 @@ class MainActivity : Activity() {
         campoLlave = findViewById(R.id.campo_llave)
         nota = findViewById(R.id.nota)
 
-        // La URL se recuerda; la llave, no. El campo de la llave nace vacio y se
-        // vacia otra vez despues de conectar.
-        campoUrl.setText(preferencias().getString(CLAVE_URL, "") ?: "")
-        campoLlave.setText("")
+        // El resto de la version anterior: la url en claro. Se borra para que no
+        // quede un dato legible que ya no se usa (`adb` lee las preferencias de una
+        // app de debug sin pedir nada).
+        preferenciasAntiguas().edit().remove(CLAVE_URL_ANTIGUA).apply()
+
+        // Los campos se rellenan de lo GUARDADO, y si no hay nada salen vacios: la
+        // pantalla no inventa una llave que no existe. `habia` se mira ANTES de
+        // `leer()` porque `leer()` borra lo que no puede descifrar: si se mirara
+        // despues, el aviso no saldria nunca.
+        val habia = credenciales.hay()
+        val guardadas = credenciales.leer()
+        campoUrl.setText(guardadas?.url ?: "")
+        campoLlave.setText(guardadas?.llave ?: "")
+        if (habia && guardadas == null) {
+            // Habia algo y se tiro (no se pudo descifrar): se dice, en vez de dejar
+            // los campos vacios sin explicacion.
+            nota.text = getString(
+                R.string.aviso_credenciales_ilegibles,
+                credenciales.ultimoMotivo ?: "sin motivo"
+            )
+        }
 
         findViewById<Button>(R.id.boton_conectar).setOnClickListener { conectar() }
         findViewById<Button>(R.id.boton_desconectar).setOnClickListener { desconectar() }
+        findViewById<Button>(R.id.boton_olvidar).setOnClickListener { olvidarLlave() }
         findViewById<Button>(R.id.boton_accesibilidad).setOnClickListener {
             abrirAjustesDeAccesibilidad()
         }
@@ -157,12 +188,17 @@ class MainActivity : Activity() {
     // ---- acciones ---------------------------------------------------------
 
     /**
-     * Conectar: valida, guarda SOLO la url y arranca el servicio en primer plano.
+     * Conectar: valida, guarda la url y la llave CIFRADAS y arranca el servicio en
+     * primer plano.
      *
      * La validacion del `wss://` esta aqui y no en el crate porque el crate tambien
      * la hace (`url_no_segura`), pero comprobarla en pantalla evita arrancar un
      * servicio que va a fallar: el motivo tiene que verse antes, no en una
      * notificacion tres segundos despues.
+     *
+     * El guardado va ANTES de arrancar el servicio: si el servicio arranca y el
+     * guardado falla, hay un canal vivo que no sobrevive a la primera vez que
+     * Android mate el proceso, y eso es peor que no arrancar y decirlo.
      */
     private fun conectar() {
         val url = campoUrl.text.toString().trim()
@@ -177,7 +213,7 @@ class MainActivity : Activity() {
             return
         }
 
-        preferencias().edit().putString(CLAVE_URL, url).apply()
+        val guardada = credenciales.guardar(url, llave)
 
         val intent = Intent(this, ServicioEnki::class.java).apply {
             action = ServicioEnki.ACCION_INICIAR
@@ -187,9 +223,39 @@ class MainActivity : Activity() {
         // minSdk 26: `startForegroundService` existe desde API 26, no hace falta rama.
         startForegroundService(intent)
 
-        // La llave no se queda en la pantalla: el servicio ya la tiene en memoria.
+        // El campo NO se vacia: la llave esta guardada, y vaciarlo haria creer que
+        // se perdio. Lo que si se dice es lo que ha pasado de verdad con el guardado.
+        nota.text = if (guardada) {
+            getString(R.string.aviso_llave_guardada)
+        } else {
+            getString(
+                R.string.aviso_llave_sin_guardar,
+                credenciales.ultimoMotivo ?: "sin motivo"
+            )
+        }
+        pintarEstado()
+    }
+
+    /**
+     * OLVIDAR LLAVE: borra la credencial del llavero y vacia los campos.
+     *
+     * No baja el servicio: un canal que ya esta abierto tiene su llave en memoria
+     * del crate y sigue funcionando hasta que se pare. Decirlo es parte del boton;
+     * borrar la llave y ademas matar el canal sin avisar seria hacer dos cosas con
+     * un boton que solo promete una.
+     */
+    private fun olvidarLlave() {
+        val borrada = credenciales.olvidar()
+        campoUrl.setText("")
         campoLlave.setText("")
-        nota.text = getString(R.string.aviso_llave_no_se_guarda)
+        nota.text = if (borrada) {
+            getString(R.string.aviso_llave_olvidada)
+        } else {
+            getString(
+                R.string.aviso_llave_olvidada_a_medias,
+                credenciales.ultimoMotivo ?: "sin motivo"
+            )
+        }
         pintarEstado()
     }
 
@@ -358,6 +424,6 @@ class MainActivity : Activity() {
         )
     }
 
-    private fun preferencias(): SharedPreferences =
-        getSharedPreferences(PREFERENCIAS, Context.MODE_PRIVATE)
+    private fun preferenciasAntiguas(): SharedPreferences =
+        getSharedPreferences(PREFERENCIAS_ANTIGUAS, Context.MODE_PRIVATE)
 }

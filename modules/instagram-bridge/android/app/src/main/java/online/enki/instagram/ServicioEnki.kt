@@ -14,16 +14,23 @@
 //
 // # Lo que NO hace, a proposito
 //
-//   - NO guarda la llave. Ni en `SharedPreferences` ni en la notificacion ni en el
-//     log. Vive en memoria mientras el servicio esta vivo, y al cerrar la app hay
-//     que volver a teclearla. Es una molestia de diez segundos contra un secreto
-//     en disco (V1).
-//   - NO reconecta. La reconexion es del crate (`canal/mqtt.rs`): dos bucles de
-//     reconexion con la misma llave son dos canales y dos suscripciones, y el
-//     broker acaba cerrando el primero.
-//   - NO arranca solo tras un reinicio. `RECEIVE_BOOT_COMPLETED` esta declarado
-//     pero no hay receptor: sin llave en disco un arranque automatico solo podria
-//     subir una notificacion vacia. Ver la nota 2 del manifiesto.
+//   - NO guarda la llave EN CLARO, y desde el bloque 19e SI la lee de donde esta
+//     guardada CIFRADA (`Credenciales.kt`: AES-256-GCM con la clave en
+//     `AndroidKeyStore`). Si el `Intent` trae url y llave, se usan; si no (un
+//     reinicio del sistema, un `PendingIntent` sin extras), se leen del llavero.
+//     Es lo que hace que el canal se levante solo despues de que MIUI mate el
+//     proceso.
+//   - NO reconecta por su cuenta. La reconexion es del hilo del crate
+//     (`canal/reconexion.rs` + el bucle de `jni`): dos bucles de reconexion con la
+//     misma llave son dos canales y dos suscripciones, y el broker acaba cerrando
+//     el primero. Aqui solo se ENSEÑA el estado que el crate cuenta
+//     (`reconectando`, con su intento y sus segundos).
+//   - NO arranca tras un reinicio del aparato. `RECEIVE_BOOT_COMPLETED` esta
+//     declarado y el llavero ya tiene la llave, pero no hay receptor: Android 12+
+//     restringe el arranque de servicios en primer plano desde BOOT_COMPLETED y un
+//     arranque que el sistema bloquea a medias es peor que uno que el dueno pide.
+//     Volver de una muerte del proceso SI (`START_STICKY`), que es el caso que
+//     duele: MIUI matandolo al abrir Instagram.
 //   - NO decide si se puede operar. El estado que enseña es el del crate, tal cual.
 //
 // # Por que `LifecycleService` y no `Service`
@@ -78,6 +85,14 @@ class ServicioEnki : LifecycleService() {
         /** Cada cuanto se relee el estado del crate para la notificacion. */
         private const val CADENCIA_MS = 3_000L
 
+        /**
+         * El valor de `canal` con el que el crate dice que esta volviendo
+         * (`canal::reconexion::TEXTO_RECONECTANDO`). Se compara por igualdad: si el
+         * crate lo renombra, esto deja de casar y la notificacion enseña el valor
+         * crudo, que sigue siendo la verdad.
+         */
+        private const val ESTADO_RECONECTANDO = "reconectando"
+
         @Volatile
         private var enMarcha: Boolean = false
 
@@ -87,6 +102,13 @@ class ServicioEnki : LifecycleService() {
         @Volatile
         private var motivoDelCanal: String? = null
 
+        /** El reintento en curso y lo que falta, cuando `canal` es `reconectando`. */
+        @Volatile
+        private var intentoDelCanal: Int = 0
+
+        @Volatile
+        private var proximoEnS: Int = 0
+
         /** ¿Hay un canal abierto (o arrancandose) en este proceso? */
         fun estaEnMarcha(): Boolean = enMarcha
 
@@ -95,6 +117,12 @@ class ServicioEnki : LifecycleService() {
 
         /** El motivo del ultimo fallo, o `null`. */
         fun motivo(): String? = motivoDelCanal
+
+        /** El reintento en curso (0 si no se esta reconectando). */
+        fun intento(): Int = intentoDelCanal
+
+        /** Los segundos que faltan para el siguiente intento (0 si no aplica). */
+        fun proximoEnS(): Int = proximoEnS
     }
 
     private val refresco = Handler(Looper.getMainLooper())
@@ -131,15 +159,29 @@ class ServicioEnki : LifecycleService() {
         // `startForegroundService`, el sistema da 5 s y despues mata la app.
         subirPrimerPlano()
 
-        val url = intent?.getStringExtra(EXTRA_URL)
-        val llave = intent?.getStringExtra(EXTRA_LLAVE)
+        val urlDelIntent = intent?.getStringExtra(EXTRA_URL)
+        val llaveDelIntent = intent?.getStringExtra(EXTRA_LLAVE)
+
+        // 19e · si el `Intent` no trae credenciales (el sistema rearranca el
+        // servicio con `intent == null`, o el `PendingIntent` de la notificacion no
+        // lleva extras), se leen del llavero. Es el camino que hace que el canal se
+        // levante solo despues de que Android mate el proceso.
+        val guardadas = if (urlDelIntent.isNullOrBlank() || llaveDelIntent.isNullOrBlank()) {
+            Credenciales.de(this).leer()
+        } else {
+            null
+        }
+
+        val url = if (!urlDelIntent.isNullOrBlank()) urlDelIntent else guardadas?.url
+        val llave = if (!llaveDelIntent.isNullOrBlank()) llaveDelIntent else guardadas?.llave
 
         if (url.isNullOrBlank() || llave.isNullOrBlank()) {
             // Sin url ni llave no hay canal: se dice, se baja la notificacion y se
             // para. Un servicio en primer plano sin nada que hacer es bateria
             // gastada y una notificacion que miente.
             estadoDelCanal = "sin_credenciales"
-            motivoDelCanal = "faltan la url o la llave del bus: el servicio no abre canal sin ellas"
+            motivoDelCanal = "faltan la url o la llave del bus y no hay ninguna guardada: " +
+                "el servicio no abre canal sin ellas"
             actualizarNotificacion()
             pararCanal()
             return START_NOT_STICKY
@@ -147,9 +189,13 @@ class ServicioEnki : LifecycleService() {
 
         arrancarCanal(url, llave)
 
-        // NO `START_STICKY`: si el sistema mata el servicio, el reintento llega con
-        // `intent == null` y sin llave. Se prefiere que no vuelva a arrancar vacio.
-        return START_NOT_STICKY
+        // `START_STICKY` desde el bloque 19e: si el sistema mata el servicio, el
+        // reintento llega con `intent == null` — y ahora eso no es el final, porque
+        // las credenciales estan en el llavero (arriba). Antes se devolvia
+        // `START_NOT_STICKY` justo porque volver sin llave solo levantaba una
+        // notificacion vacia. El canal que se cae se reintenta dentro del crate; lo
+        // que esto arregla es la MUERTE DEL PROCESO, que es otra cosa.
+        return START_STICKY
     }
 
     override fun onDestroy() {
@@ -189,8 +235,14 @@ class ServicioEnki : LifecycleService() {
                 PuenteNativo.detenerSeguro()
             }
             val abierto = PuenteNativo.iniciarSeguro(url, llave)
-            estadoDelCanal = if (abierto) "conectado" else "sin_canal"
+            // `iniciarSeguro` devuelve `true` cuando el hilo del crate arranco, NO
+            // cuando el CONNACK llego (el borde no espera al broker: bloquearia el
+            // hilo). `conectando` es lo unico que se puede afirmar aqui; el vigilante
+            // lee el estado de verdad 3 s despues.
+            estadoDelCanal = if (abierto) "conectando" else "sin_canal"
             motivoDelCanal = if (abierto) null else PuenteNativo.ultimoMotivo()
+            intentoDelCanal = 0
+            proximoEnS = 0
 
             // La notificacion se toca en el hilo principal, siempre.
             refresco.post {
@@ -222,13 +274,28 @@ class ServicioEnki : LifecycleService() {
         stopSelf()
     }
 
-    /** Relee el estado del crate. Lo que diga el crate es lo que se enseña. */
+    /**
+     * Relee el estado del crate. Lo que diga el crate es lo que se enseña.
+     *
+     * `intento` y `proximo_en_s` (19e) solo vienen cuando el crate esta
+     * reconectando; en cualquier otro estado se ponen a 0 para no enseñar un
+     * "intento 3" de una reconexion que ya termino.
+     */
     private fun leerEstado() {
         if (!enMarcha) return
         val bruto = PuenteNativo.estadoSeguro()
         estadoDelCanal = leerCampo(bruto, "canal") ?: bruto
         motivoDelCanal = leerCampo(bruto, "motivo")
+        intentoDelCanal = leerNumero(bruto, "intento")
+        proximoEnS = leerNumero(bruto, "proximo_en_s")
         actualizarNotificacion()
+    }
+
+    /** Un campo numerico del estado, o 0 si no esta o el JSON no se puede leer. */
+    private fun leerNumero(bruto: String, campo: String): Int = try {
+        JSONObject(bruto).optInt(campo, 0)
+    } catch (e: Exception) {
+        0
     }
 
     /** Un campo de texto del estado, o `null` si no esta o el JSON no se puede leer. */
@@ -297,7 +364,14 @@ class ServicioEnki : LifecycleService() {
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
         )
 
-        val cuerpo = getString(R.string.notificacion_texto, estadoDelCanal)
+        // La notificacion cuenta lo que pasa: cuando el crate esta volviendo, dice
+        // por que intento va y cuanto falta. "reconectando" a secas se lee como un
+        // canal caido que no vuelve, y es lo contrario.
+        val cuerpo = if (estadoDelCanal == ESTADO_RECONECTANDO && intentoDelCanal > 0) {
+            getString(R.string.notificacion_reconectando, intentoDelCanal, proximoEnS)
+        } else {
+            getString(R.string.notificacion_texto, estadoDelCanal)
+        }
         val completo = motivoDelCanal?.let { "$cuerpo · $it" } ?: cuerpo
 
         return NotificationCompat.Builder(this, CANAL_DE_NOTIFICACIONES)

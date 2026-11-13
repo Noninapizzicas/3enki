@@ -7,12 +7,14 @@
      dar permiso a un canal que el crate no abre, y dejar la puerta abierta para
      el dia que alguien pruebe con `ws://`.
 
-  2. `RECEIVE_BOOT_COMPLETED` esta declarado pero NO hay receptor todavia. Un
-     arranque automatico necesita la llave del bus, y la llave no se guarda en
-     disco (V1: ningun secreto en el estado). Arrancar el servicio sin llave seria
-     un servicio vacio que gasta bateria y miente en la notificacion. El dueño
-     abre la app tras reiniciar; cuando exista un almacen de credenciales
-     cifrado, se añade el receptor.
+  2. `RECEIVE_BOOT_COMPLETED` esta declarado pero NO hay receptor. Desde el bloque
+     19e la llave SI esta en el aparato, pero cifrada en el llavero (`Credenciales.kt`),
+     no en un fichero: la razon para no arrancar en el boot ya no es "no hay llave",
+     es que Android 12+ restringe el arranque de servicios en primer plano desde
+     BOOT_COMPLETED y un arranque a medias (servicio arriba, canal sin red) es peor
+     que uno que el dueño pide. Lo que SI se cubre es la muerte del proceso
+     (`START_STICKY` en `ServicioEnki`), que es el caso de MIUI matandolo al abrir
+     Instagram.
 
   3. El servicio de accesibilidad es `exported="true"` con
      `BIND_ACCESSIBILITY_SERVICE`: no es una fuga, es el contrato de Android. Solo

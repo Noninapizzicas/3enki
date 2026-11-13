@@ -79,6 +79,15 @@
             android:layout_marginTop="8dp"
             android:text="@string/boton_desconectar" />
 
+        <!-- 19e · borra la credencial cifrada del llavero. Va pegado a Conectar y
+             Desconectar porque es de la misma familia: lo que se hace con la llave. -->
+        <Button
+            android:id="@+id/boton_olvidar"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:text="@string/boton_olvidar" />
+
         <Button
             android:id="@+id/boton_accesibilidad"
             android:layout_width="match_parent"

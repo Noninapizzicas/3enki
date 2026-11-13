@@ -14,6 +14,8 @@
     <string name="campo_llave_hint">Llave del bus</string>
     <string name="boton_conectar">Conectar</string>
     <string name="boton_desconectar">Desconectar</string>
+    <!-- 19e · el unico boton que BORRA. Se llama por lo que hace. -->
+    <string name="boton_olvidar">OLVIDAR LLAVE</string>
     <string name="boton_accesibilidad">Abrir ajustes de accesibilidad</string>
     <string name="boton_observar">PROBAR VOLCADO (esta app)</string>
     <string name="boton_copiar">COPIAR VOLCADO</string>
@@ -25,7 +27,9 @@
     <string name="biblioteca_presente">Libreria nativa: cargada (enki_instagram_bridge)</string>
     <string name="biblioteca_ausente">Libreria nativa: NO cargada. El APK se construyo sin jniLibs (compilacion del crate pendiente).</string>
 
-    <string name="nota_inicial">La llave no se guarda en el aparato: se teclea en cada arranque y vive solo en memoria mientras el servicio esta vivo.</string>
+    <!-- Nota al pie (19e). Dice la verdad de donde vive la llave: NO esta en claro,
+         esta cifrada en el llavero del aparato, y se puede borrar con un boton. -->
+    <string name="nota_inicial">La llave se guarda CIFRADA en el llavero del aparato (Keystore): el canal puede levantarse solo aunque Android mate el proceso. OLVIDAR LLAVE la borra.</string>
 
     <!-- Nota fija al pie (19c). El boton de volcado se queda como diagnostico,
          pero NO sirve para volcar Instagram: al pulsarlo, la app pasa a primer
@@ -33,7 +37,11 @@
          dice para que nadie pierda una tarde escribiendo una receta con el
          arbol de nuestra propia pantalla. -->
     <string name="nota_volcado_diagnostico">PROBAR VOLCADO solo diagnostica: al pulsar, esta app pasa a primer plano y el volcado sale de ESTA pantalla, no de Instagram. Para volcar Instagram usa la orden observar desde el bus.</string>
-    <string name="aviso_llave_no_se_guarda">Canal arrancando. La llave no se guarda en disco; si cierras la app, hay que volver a teclearla.</string>
+    <string name="aviso_llave_guardada">Canal arrancando. La llave queda guardada cifrada en el llavero del aparato: si Android mata el proceso, el canal se levanta solo.</string>
+    <string name="aviso_llave_sin_guardar">Canal arrancando, pero la llave NO se pudo guardar (%1$s). Si Android mata el proceso habra que teclearla otra vez.</string>
+    <string name="aviso_llave_olvidada">Llave borrada del aparato. Un canal que ya este en marcha sigue vivo hasta que pulses Desconectar.</string>
+    <string name="aviso_llave_olvidada_a_medias">Llave borrada, pero el llavero no dejo borrar la clave (%1$s). El dato cifrado ya no esta.</string>
+    <string name="aviso_credenciales_ilegibles">Habia una llave guardada y no se pudo descifrar (%1$s): se ha borrado. Tecleala otra vez.</string>
 
     <string name="error_url_insegura">La URL tiene que empezar por wss://. El crate no abre un canal sin TLS, asi que un ws:// solo daria un error mas tarde y peor.</string>
     <string name="error_sin_llave">Falta la llave del bus.</string>
@@ -56,6 +64,8 @@
     <string name="notificacion_canal_descripcion">Estado del canal con el bus de Enki mientras el servicio esta en marcha.</string>
     <string name="notificacion_titulo">Puente Enki</string>
     <string name="notificacion_texto">Canal: %1$s</string>
+    <!-- 19e · el estado que dice la verdad mientras el crate vuelve solo. -->
+    <string name="notificacion_reconectando">Canal: reconectando · intento %1$d · proximo en %2$d s</string>
     <string name="accion_parar">Parar</string>
 
 </resources>

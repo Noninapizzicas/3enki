@@ -38,11 +38,13 @@
 // # Lo que NO hace
 //
 //   - NO guarda la llave. La recibe, la pasa al crate y el unico rastro que queda
-//     es el de la memoria del proceso. Un `SharedPreferences` con la llave dentro
-//     es un secreto en el estado (V1) y ademas sobrevive al borrado de la app en
-//     las copias de seguridad.
-//   - NO reintenta ni reconecta. La reconexion es del crate (canal/mqtt.rs); un
-//     reintento escondido aqui abriria dos canales con la misma llave.
+//     es el de la memoria del proceso. Quien la guarda (cifrada, con la clave en
+//     `AndroidKeyStore`) es `Credenciales.kt` (bloque 19e), y solo `ServicioEnki` y
+//     `MainActivity` la usan: este borde no toca el disco.
+//   - NO reintenta ni reconecta. El reintento es del hilo del crate
+//     (`canal::reconexion` + el bucle de `jni/mod.rs`); un reintento escondido aqui
+//     abriria dos canales con la misma llave. Aqui solo se lee el estado que el
+//     crate cuenta, que ahora puede ser `reconectando`.
 //   - NO interpreta el estado. `estado()` devuelve el JSON del crate tal cual; si
 //     viene roto, se devuelve un JSON nuestro que lo declara.
 //

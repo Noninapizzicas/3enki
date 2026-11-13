@@ -305,6 +305,11 @@
 
   // Acciones sidebar (llevadoo no tiene cobro — pago externo)
   $: isLlevadoo = cuenta_id.startsWith('llevadoo_');
+  // La cuenta de trozos es EXISTENCIAS, no venta: se manda a cocina y se anuncia
+  // en la pantalla, pero el dinero entra por los trozos que se venden al mostrador
+  // (que no pasan por esta cuenta). Cobrarla apuntaría al libro una venta de pizzas
+  // enteras que nadie ha cobrado. Se cierra sola al cierre de caja.
+  $: isTrozos = cuenta_id.startsWith('trozos_');
 
   // D3 (subsistema-catalogo): canal activo desde el prefijo de cuenta_id. Los composers lo usan
   // para tasar contra la carta del canal (si tiene override). 'mesa' por defecto.
@@ -321,7 +326,7 @@
     { id: 'cobro', label: 'Cobro', icon: '💶', variant: 'default' as const },
     { id: 'salir', label: 'Salir', icon: '↩️', variant: 'danger' as const }
   ];
-  $: acciones = isLlevadoo ? accionesBase.filter(a => a.id !== 'cobro') : accionesBase;
+  $: acciones = (isLlevadoo || isTrozos) ? accionesBase.filter(a => a.id !== 'cobro') : accionesBase;
 
   // Estado resultado impresion
   let printResult: { type: 'ok' | 'error'; msg: string } | null = null;

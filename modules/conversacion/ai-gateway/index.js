@@ -48,7 +48,10 @@ class AiGatewayModule extends BaseModule {
   constructor() {
     super();
     this.name = 'ai-gateway';
-    this.version = '2.36.0';
+    // Debe coincidir con module.json: dos fuentes de verdad para la versión
+    // hacen que el módulo mienta sobre lo que corre (estaba en 2.36.0 con el
+    // manifest en 2.38.0, y el test lo destapó).
+    this.version = require('./module.json').version;
     this.config = null;
     this.moduleLoader = null;
 

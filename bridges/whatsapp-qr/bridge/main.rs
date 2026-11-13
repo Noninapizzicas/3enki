@@ -184,6 +184,15 @@ fn primera_vez(id: &str) -> bool {
     }
 }
 
+/// La ÚNICA puerta: ¿esta entrada se escribe?
+///
+/// Dos caras del mismo mensaje repetido, una sola regla. El eco de un envío
+/// propio no se escribe Y NO CONSUME el id: el original que llega al negocio
+/// destinatario tiene que poder entrar después.
+fn entrada_nueva(from_me: bool, id: &str) -> bool {
+    !from_me && primera_vez(id)
+}
+
 /// Append de una línea JSON. Abre y cierra por evento: el volumen aquí es de
 /// decenas al día, no de miles por segundo.
 fn emitir(path: &str, mut v: serde_json::Value) {
@@ -305,15 +314,15 @@ async fn construir(
                 // demás dispositivos de la misma cuenta una copia de cada mensaje
                 // que sale de cualquiera de ellos; esa copia entraba como
                 // "recibido" y duplicaba el mensaje.
-                if ctx.info.source.is_from_me {
-                    info!("[{slug}] -> {de} ({push}): eco de un mensaje propio, no es una entrada");
-                    return;
-                }
-                // Misma cuenta en dos sesiones = mismo mensaje dos veces.
-                if !primera_vez(&id) {
-                    info!(
-                        "[{slug}] <- {de} ({push}): copia del mismo mensaje (id {id}) ya emitida por otra sesion, no se duplica"
-                    );
+                let from_me = ctx.info.source.is_from_me;
+                if !entrada_nueva(from_me, &id) {
+                    if from_me {
+                        info!("[{slug}] -> {de} ({push}): eco de un mensaje propio, no es una entrada");
+                    } else {
+                        info!(
+                            "[{slug}] <- {de} ({push}): copia del mismo mensaje (id {id}), no se duplica"
+                        );
+                    }
                     return;
                 }
                 info!("[{slug}] <- {de} ({push}): {texto}");
@@ -683,5 +692,22 @@ mod tests_dedupe_entre_sesiones {
         assert_eq!(v.set.len(), VISTOS_MAX, "el registro está acotado");
         assert!(v.primera_vez("viejo"), "el id olvidado se vuelve a emitir");
         assert!(!v.primera_vez("viejo"), "y después ya no");
+    }
+
+    /// El eco de un envío propio no se escribe... y NO consume el id: el
+    /// original que llega al negocio destinatario tiene que entrar después.
+    #[test]
+    fn el_eco_no_se_escribe_y_no_consume_el_id() {
+        let id = "eco-3EB0CAFE0001";
+        assert!(!entrada_nueva(true, id), "el eco de un envío propio no es una entrada");
+        assert!(entrada_nueva(false, id), "el original sí entra: el eco no se lo comió");
+    }
+
+    /// Una entrada real vista dos veces por dos sesiones entra una sola vez.
+    #[test]
+    fn la_segunda_copia_no_se_escribe() {
+        let id = "copia-AC1A95EA0002";
+        assert!(entrada_nueva(false, id));
+        assert!(!entrada_nueva(false, id));
     }
 }

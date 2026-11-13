@@ -1,0 +1,458 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>Pantalla</title>
+<style>
+  :root{
+    /* Paleta NEUTRA de la base: no es la marca de nadie. Cada proyecto la tiñe
+       con presentacion.colores (fondo/acento/texto), que viene de su marca.json. */
+    --fondo:#111214; --acento:#D8D3C8; --texto:#F2F0EC; --tenue:#8d8d88;
+    --panel:#191A1C; --verde:#5BD08A; --rojo:#E4674F; --linea:rgba(216,211,200,.22);
+    --serif: Georgia, "Times New Roman", serif;
+    --sans: Inter, Lato, "Helvetica Neue", Arial, sans-serif;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  /* ── EL PANEL: la tele no gira la ventana, la giramos nosotros ────────────
+     Una webOS de consumo no tiene ajuste de rotación: aunque el panel esté
+     colgado en vertical, el navegador sigue declarando 1920x1080. Por eso se
+     compone un lienzo vertical de 1080x1920 y se le da un cuarto de vuelta
+     exacto: girado, su caja mide 1920x1080 y llena el panel sin escalar y sin
+     recortar. El signo de abajo dice hacia dónde: rotamos la IMAGEN a la
+     derecha (90deg), o sea que la tele se cuelga girándola hacia la IZQUIERDA
+     (su borde derecho arriba). Si se cuelga al revés se ve del derecho
+     cambiando 90deg por -90deg — una línea. */
+  html,body{width:1920px;height:1080px;overflow:hidden;background:#000;color:var(--texto);font-family:var(--sans)}
+  #lienzo{position:fixed;top:50%;left:50%;width:1080px;height:1920px;
+    transform:translate(-50%,-50%) rotate(90deg);transform-origin:center center;
+    display:flex;flex-direction:column;background:var(--fondo)}
+
+  /* ── A · cabecera (fija) — marca, abierto, hora */
+  #A{height:118px;display:grid;grid-template-columns:92px minmax(0,1fr) 92px;align-items:center;padding:0 22px;border-bottom:1px solid var(--linea)}
+  #A .lado{display:flex;align-items:center;justify-content:flex-start}
+  #A .lado.der{justify-content:flex-end}
+  #A .lado img{height:66px;width:66px;object-fit:contain;opacity:.95;border-radius:50%;
+    -webkit-mask-image:radial-gradient(circle at 50% 50%,#000 66%,transparent 76%);
+    mask-image:radial-gradient(circle at 50% 50%,#000 66%,transparent 76%)}
+  #A .centro{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:7px;min-width:0}
+  .marca-nombre{font-family:var(--serif);font-size:36px;line-height:1;letter-spacing:.18em;text-transform:uppercase;color:var(--texto);white-space:nowrap}
+  .estado{display:flex;align-items:center;gap:11px}
+  .punto{width:13px;height:13px;border-radius:50%;background:var(--tenue);box-shadow:0 0 0 5px rgba(255,255,255,.04);flex:0 0 auto}
+  .punto.abierto{background:var(--verde);box-shadow:0 0 18px rgba(91,208,138,.55)}
+  .punto.cerrado{background:var(--rojo);box-shadow:0 0 18px rgba(228,103,79,.4)}
+  .estado-linea{display:flex;align-items:baseline;gap:10px}
+  .estado-txt{font-size:20px;font-weight:700;letter-spacing:.14em;text-transform:uppercase}
+  .estado-sub{font-size:17px;color:var(--tenue);letter-spacing:.04em}
+  .reloj{font-variant-numeric:tabular-nums;font-size:16px;color:var(--tenue);letter-spacing:.14em}
+
+  /* ── F · cinta */
+  #F{height:38px;display:flex;align-items:center;overflow:hidden;padding-left:20px;
+     background:linear-gradient(90deg,rgba(212,165,55,.12),rgba(212,165,55,.03));border-bottom:1px solid var(--linea)}
+  .cinta-track{display:flex;gap:48px;white-space:nowrap;animation:corre 60s linear infinite;will-change:transform}
+  .cinta-track span{font-size:16px;letter-spacing:.18em;text-transform:uppercase;color:#c9bda2}
+  .cinta-track span::after{content:"·";margin-left:48px;color:var(--acento)}
+  #F.vacia{display:none}
+  @keyframes corre{from{transform:translateX(0)}to{transform:translateX(-50%)}}
+
+  /* ── cuerpo: una sola columna, de arriba abajo */
+  #cuerpo{flex:1;min-height:0;display:flex;flex-direction:column;gap:16px;padding:16px 20px 14px}
+  .panel{background:var(--panel);border:1px solid var(--linea);border-radius:8px;min-width:0;position:relative;overflow:hidden}
+
+  /* B · el cartel del día: manda la foto, texto encima */
+  #B{flex:0 0 800px;padding:0!important;border:0;background:none}
+  #B .bloque-dia{position:relative;height:100%;display:flex;flex-direction:column;
+    justify-content:space-between;gap:14px;padding:34px 34px 30px;overflow:hidden;border-radius:8px;
+    background:radial-gradient(120% 90% at 15% 0%,#221d15 0%,#14120f 55%,#0c0c0b 100%)}
+  #B .bloque-dia .texto{display:flex;flex-direction:column;gap:14px;position:relative;z-index:2;margin-top:auto}
+  #B .bloque-dia .top,#B .bloque-dia .pie-dia{position:relative;z-index:2}
+  #B .eyebrow{display:flex;align-items:center;gap:12px;font-size:17px;letter-spacing:.24em;text-transform:uppercase;color:var(--acento)}
+  #B .eyebrow::before{content:"";width:34px;height:1px;background:var(--acento)}
+  #B .titulo{font-family:var(--serif);font-size:88px;line-height:1.0;color:#fff;text-wrap:balance}
+  #B .sub{font-size:23px;line-height:1.45;color:#c3baa9}
+  #B .precio{font-family:var(--serif);font-size:92px;line-height:1;color:var(--acento);padding-top:18px;border-top:1px solid var(--linea)}
+  #B .vig{font-size:16px;letter-spacing:.2em;text-transform:uppercase;color:var(--tenue);margin-top:10px}
+  #B .foto{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;z-index:0}
+  #B .velo-b{position:absolute;inset:0;z-index:1;
+    background:linear-gradient(180deg,rgba(8,8,8,.88) 0%,rgba(8,8,8,.22) 16%,rgba(8,8,8,.18) 34%,rgba(8,8,8,.42) 46%,rgba(8,8,8,.78) 56%,rgba(8,8,8,.94) 66%,rgba(8,8,8,.99) 100%)}
+  #B .filete{height:1px;background:linear-gradient(90deg,var(--linea),transparent);margin:11px 0 0}
+
+  /* C · carrusel */
+  #C{flex:1 1 auto;min-height:0;display:flex;flex-direction:column}
+  #C .marco{flex:1;min-height:0;position:relative}
+  .slide{position:absolute;inset:0;opacity:0;transition:opacity .7s ease;display:flex;flex-direction:column;overflow:hidden;border-radius:8px}
+  .slide.on{opacity:1}
+  .slide .fondo{position:absolute;inset:0;background-size:cover;background-position:center;transform:scale(1.03)}
+  .slide .velo{position:absolute;inset:0;background:linear-gradient(180deg,rgba(8,8,8,.6) 0%,rgba(8,8,8,.1) 24%,rgba(8,8,8,.55) 46%,rgba(8,8,8,.95) 100%)}
+  .slide .cuerpo{position:relative;margin-top:auto;padding:44px 40px 36px}
+  .slide .seccion{font-size:16px;letter-spacing:.24em;text-transform:uppercase;color:var(--acento)}
+  .slide .nom{font-family:var(--serif);font-size:78px;line-height:.99;color:#fff;margin-top:10px;max-width:94%;text-wrap:balance}
+  .slide .arg{font-size:25px;line-height:1.35;color:#ddd4c3;margin-top:14px;max-width:88%}
+  .slide .pie{display:flex;align-items:flex-end;justify-content:space-between;gap:22px;margin-top:22px}
+  .slide .pvp{font-family:var(--serif);font-size:70px;color:var(--acento);white-space:nowrap}
+  .chips{display:flex;flex-wrap:wrap;gap:8px;max-width:66%}
+  .chip{font-size:16px;letter-spacing:.1em;text-transform:uppercase;color:#cfc4ad;border:1px solid rgba(212,165,55,.35);border-radius:999px;padding:6px 14px;background:rgba(0,0,0,.25)}
+  .slide.solo-texto{background:radial-gradient(120% 100% at 20% 0%,#211d16 0%,#111 55%,#0b0b0b 100%)}
+  .slide.solo-texto .cuerpo{margin-top:0;height:100%;display:flex;flex-direction:column;justify-content:space-between;padding-top:130px;padding-bottom:30px}
+  .slide.solo-texto .bloque-txt{display:flex;flex-direction:column;gap:14px}
+  .slide.solo-texto .bloque-pie{display:flex;flex-direction:column;gap:4px}
+  .slide.solo-texto .nom{font-size:78px;max-width:96%}
+  .slide.solo-texto .arg{font-size:23px;line-height:1.32}
+  .slide.solo-texto .pvp{font-size:58px}
+  /* identidad de la ficha sin foto: el nombre de la casa en marca de agua llena
+     el aire de arriba, así el vacío se lee como diseño y no como hueco. */
+  .slide .marca-agua{position:absolute;top:26px;left:38px;right:38px;font-family:var(--serif);
+    font-size:104px;line-height:.88;text-transform:uppercase;letter-spacing:.01em;
+    color:rgba(212,165,55,.10);max-width:92%;overflow:hidden}
+  .slide .num{position:absolute;top:34px;right:38px;font-size:16px;letter-spacing:.22em;
+    color:rgba(245,230,200,.62);font-variant-numeric:tabular-nums;text-shadow:0 1px 4px rgba(0,0,0,.85)}
+  .slide .raya{position:absolute;top:0;left:0;width:46%;height:3px;background:linear-gradient(90deg,var(--acento),transparent);opacity:.75}
+  .slide .alerg{font-size:15px;letter-spacing:.14em;text-transform:uppercase;color:#8d8677;margin-top:12px}
+  .slide .cifra{font-family:var(--serif);font-size:130px;color:var(--acento);line-height:1}
+  #C .progreso{height:3px;background:rgba(255,255,255,.08);border-radius:2px;margin-top:10px;overflow:hidden}
+  #C .progreso i{display:block;height:100%;width:0;background:var(--acento)}
+
+  /* D · contacto: tarjeta horizontal, tres pisos en fila */
+  #D{flex:0 0 246px;padding:24px 26px!important}
+  #D .contacto-in{display:grid;grid-template-columns:minmax(0,1.15fr) minmax(0,1fr) auto;gap:24px;align-items:center;height:100%}
+  #D .rot{font-size:15px;letter-spacing:.22em;text-transform:uppercase;color:var(--acento)}
+  #D .dir{font-family:var(--serif);font-size:40px;line-height:1.12;color:#fff;margin-top:12px}
+  #D .ciudad{font-size:21px;color:#b9b0a0;margin-top:6px}
+  #D .tel{font-family:var(--serif);font-size:52px;color:var(--texto);letter-spacing:.02em;white-space:nowrap}
+  #D .como{font-size:15px;letter-spacing:.14em;text-transform:uppercase;color:var(--tenue);margin-top:10px;padding-top:10px;border-top:1px solid var(--linea)}
+  #D .extra{font-size:18px;color:#a89e8c;margin-top:6px}
+  #D .horario{margin-top:12px;display:flex;flex-direction:column;gap:6px}
+  #D .horario .h{display:flex;justify-content:space-between;gap:12px;align-items:baseline;border-bottom:1px dashed rgba(212,165,55,.16);padding-bottom:5px}
+  #D .horario .hd{font-size:14px;letter-spacing:.14em;text-transform:uppercase;color:var(--acento);white-space:nowrap}
+  #D .horario .hf{font-size:16px;color:#cfc4ad;font-variant-numeric:tabular-nums;text-align:right}
+  #D .qr{display:flex;flex-direction:column;align-items:center;gap:10px}
+  #D .qr img{width:150px;height:150px;border-radius:4px}
+  #D .qr .t{font-size:14px;letter-spacing:.16em;text-transform:uppercase;color:var(--tenue);line-height:1.5;text-align:center}
+
+  /* E · franja (trozos) — las tarjetas se reparten el ancho: con 4 o 5 piezas
+     ninguna se sale del lienzo (medido: con ancho fijo la cuarta se cortaba). */
+  #E{flex:0 0 96px;display:flex;align-items:stretch;gap:12px}
+  #E.vacia{display:none}
+  .trozo{flex:1 1 0;min-width:0;display:flex;align-items:center;gap:12px;background:var(--panel);border:1px solid var(--linea);border-radius:8px;padding:0 18px}
+  .trozo .t{font-family:var(--serif);font-size:21px;color:#fff;line-height:1.18;overflow:hidden;
+    display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical}
+  .trozo .p{font-family:var(--serif);font-size:28px;color:var(--acento);margin-left:auto;white-space:nowrap}
+  .trozo .et{display:none}   /* el rótulo ya lo dice el «Al corte · hoy» de la izquierda */
+  #E .rot-e{align-self:center;font-size:14px;letter-spacing:.22em;text-transform:uppercase;color:var(--acento);writing-mode:vertical-rl;transform:rotate(180deg)}
+</style>
+</head>
+<body>
+<div id="lienzo">
+  <header id="A">
+    <div class="lado izq" id="A-izq"></div>
+    <div class="centro" id="A-centro"></div>
+    <div class="lado der" id="A-der"></div>
+  </header>
+  <div id="F"><div class="cinta-track" id="F-track"></div></div>
+  <main id="cuerpo">
+    <section class="panel" id="B"></section>
+    <section id="C"><div class="marco" id="C-marco"></div><div class="progreso"><i id="C-barra"></i></div></section>
+    <section class="panel" id="D"></section>
+    <footer id="E"></footer>
+  </main>
+</div>
+
+<script>
+'use strict';
+
+/* ─────────────────────────────────────────────────────────────────────────
+   LA PANTALLA NO SABE DE PIZZAS. Solo conoce piezas con forma:
+   cabecera · cinta · foto · ficha · contacto · franja · cifra.
+   Cada forma tiene su manera de dibujarse; aquí termina su identidad.
+   ───────────────────────────────────────────────────────────────────────── */
+
+const CLAVE_ULTIMO = 'pantalla-tv/ultimo-bueno';
+const SEG_POR_PIEZA = 12;
+
+let datos = null;
+
+function esc(s){ return String(s == null ? '' : s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+
+/* ── estado del servicio: se calcula AQUÍ, cada segundo, no al publicar ──── */
+const DIAS = ['domingo','lunes','martes','miercoles','jueves','viernes','sabado'];
+
+function ahoraMadrid(){
+  const f = new Intl.DateTimeFormat('en-GB', { timeZone:'Europe/Madrid', weekday:'short', hour:'2-digit', minute:'2-digit', hour12:false });
+  const p = f.formatToParts(new Date()).reduce((a,x)=>(a[x.type]=x.value,a),{});
+  const idx = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'].indexOf(p.weekday);
+  return { dia: DIAS[(idx+7)%7], hhmm: `${p.hour}:${p.minute}`, fecha: new Intl.DateTimeFormat('en-CA',{timeZone:'Europe/Madrid'}).format(new Date()) };
+}
+
+function aMin(hhmm){ const [h,m]=String(hhmm).split(':').map(Number); return h*60+m; }
+function franjasDe(cfg, fecha, dia){
+  const ex = (cfg.excepciones||[]).find(e => e.fecha === fecha);
+  if (ex) return { franjas: ex.franjas||[], motivo: ex.motivo||null };
+  return { franjas: (cfg.horario && cfg.horario[dia]) || [], motivo: null };
+}
+
+function estado(cfg){
+  if (cfg.interruptor && cfg.interruptor.abierto === false) {
+    return { abierto:false, texto:'CERRADO', sub: cfg.interruptor.motivo_texto || 'Hoy no abrimos' };
+  }
+  const { dia, hhmm, fecha } = ahoraMadrid();
+  const { franjas } = franjasDe(cfg, fecha, dia);
+  const ahora = aMin(hhmm);
+  const orden = (franjas||[]).map(f => f.split('-').map(aMin)).sort((a,b)=>a[0]-b[0]);
+  for (const [ini,fin] of orden){
+    if (ahora >= ini && ahora <= fin) {
+      return { abierto:true, texto:'ABIERTO', sub:`Hasta las ${String(Math.floor(fin/60)).padStart(2,'0')}:${String(fin%60).padStart(2,'0')}` };
+    }
+  }
+  const siguiente = orden.find(([ini]) => ini > ahora);
+  if (siguiente) {
+    const [ini] = siguiente;
+    return { abierto:false, texto:'CERRADO', sub:`Abrimos a las ${String(Math.floor(ini/60)).padStart(2,'0')}:${String(ini%60).padStart(2,'0')}` };
+  }
+  return { abierto:false, texto:'CERRADO', sub:'Abrimos mañana' };
+}
+
+/* ── formas ─────────────────────────────────────────────────────────────── */
+
+const FORMA = {
+  cabecera(p, zona){
+    if (zona !== 'A') return null;
+    const tipo = (p.datos||{}).tipo;
+    if (tipo === 'logo') {
+      return `<img src="${esc(p.imagen||'')}" alt="${esc(p.titulo||'')}" style="${p.datos.espejo?'transform:scaleX(-1)':''}">`;
+    }
+    if (tipo === 'estado') {
+      const marca = (datos.presentacion && datos.presentacion.nombre) || '';
+      return `<span class="marca-nombre">${esc(marca)}</span>
+        <span class="estado-linea"><i class="punto" id="punto"></i>
+          <span class="estado-txt" id="estado-txt">—</span>
+          <span class="estado-sub" id="estado-sub"></span>
+        </span>
+        <span class="reloj" id="reloj"></span>`;
+    }
+    return null;
+  },
+
+  cinta(p){
+    const textos = (p.datos||{}).textos || [];
+    if (!textos.length) return null;
+    const t = textos.map(x => `<span>${esc(x)}</span>`).join('');
+    return t + t;   // duplicado para que el bucle no tenga costura
+  },
+
+  foto(p, i, n){
+    const seccion = (p.datos||{}).seccion || '';
+    return `<div class="slide" data-tanda="1">
+      <div class="fondo" style="background-image:url('${esc(p.imagen)}')"></div>
+      <div class="velo"></div>
+      <div class="raya"></div>
+      <div class="num">${String(i+1).padStart(2,'0')} / ${String(n).padStart(2,'0')}</div>
+      <div class="cuerpo">
+        <div class="bloque-txt">
+          <div class="nom">${esc(p.titulo)}</div>
+          ${p.subtitulo?`<div class="arg">${esc(p.subtitulo)}</div>`:''}
+        </div>
+        <div class="bloque-pie">
+          <div class="pie">
+            <div class="chips">${(p.etiquetas||[]).map(e=>`<span class="chip">${esc(e)}</span>`).join('')}</div>
+            <div class="pvp">${esc(p.precio||'')}</div>
+          </div>
+          ${(p.datos&&p.datos.alergenos_texto)?`<div class="alerg">Contiene ${esc(p.datos.alergenos_texto)}</div>`:''}
+        </div>
+      </div>
+    </div>`;
+  },
+
+  ficha(p, i, n){
+    const seccion = (p.datos||{}).seccion || '';
+    return `<div class="slide solo-texto" data-tanda="1">
+      <div class="raya"></div>
+      <div class="num">${String(i+1).padStart(2,'0')} / ${String(n).padStart(2,'0')}</div>
+      <div class="marca-agua">${esc(seccion)}</div>
+      <div class="cuerpo">
+        <div class="seccion">${esc(seccion)}</div>
+        <div class="nom">${esc(p.titulo)}</div>
+        ${p.subtitulo?`<div class="arg">${esc(p.subtitulo)}</div>`:''}
+        <div class="pie">
+          <div class="chips">${(p.etiquetas||[]).map(e=>`<span class="chip">${esc(e)}</span>`).join('')}</div>
+          <div class="pvp">${esc(p.precio||'')}</div>
+        </div>
+        ${(p.datos&&p.datos.alergenos_texto)?`<div class="alerg">Contiene ${esc(p.datos.alergenos_texto)}</div>`:''}
+      </div>
+    </div>`;
+  },
+
+  cifra(p){
+    return `<div class="slide solo-texto" data-tanda="1">
+      <div class="cuerpo">
+        <div class="seccion">${esc((p.datos||{}).desde?('Hasta el '+String(p.datos.hasta||'').split('-').reverse().join('/')):'Hoy')}</div>
+        <div class="nom">${esc(p.titulo)}</div>
+        ${p.subtitulo?`<div class="arg">${esc(p.subtitulo)}</div>`:''}
+        ${p.precio?`<div class="pie"><div class="cifra">${esc(p.precio)}</div></div>`:''}
+      </div>
+    </div>`;
+  },
+
+  contacto(p){
+    const d = p.datos||{};
+    const tel = String(d.telefono||'').replace(/\D/g,'');
+    const telFmt = tel.length===9 ? `${tel.slice(0,3)} ${tel.slice(3,5)} ${tel.slice(5,7)} ${tel.slice(7)}` : (d.telefono||'');
+    const insta = (datos.presentacion && datos.presentacion.redes && datos.presentacion.redes.instagram)
+      ? datos.presentacion.redes.instagram.replace(/^https?:\/\/(www\.)?instagram\.com\//,'@').replace(/\/$/,'')
+      : null;
+    return `<div class="contacto-in">
+      <div class="c-top">
+        <div class="rot">Dónde estamos</div>
+        <div class="dir">${esc(d.direccion||'')}</div>
+        <div class="ciudad">${esc(d.ciudad||'')}</div>
+      </div>
+      <div class="c-medio">
+        <div class="tel">${esc(telFmt)}</div>
+        <div class="como">Pedidos por WhatsApp</div>
+        ${insta?`<div class="extra">${esc(insta)}</div>`:''}
+        ${(Array.isArray(d.horario)&&d.horario.length)?`<div class="horario">${d.horario.map(h=>
+          `<div class="h"><span class="hd">${esc(h.dias)}</span><span class="hf">${esc((h.franjas||[]).map(f=>String(f).replace('-',' – ')).join(' · '))}</span></div>`
+        ).join('')}</div>`:''}
+      </div>
+      ${d.whatsapp?`<div class="qr"><img src="${esc((datos.presentacion&&datos.presentacion.qr)||'qr.png')}" alt=""><div class="t">Pide<br>desde el móvil</div></div>`:''}
+    </div>`;
+  },
+
+  franja(p){
+    return `<div class="trozo">
+      <div><div class="et">Para trozos</div><div class="t">${esc(p.titulo)}</div></div>
+      <div class="p">${esc(p.precio||'')}</div>
+    </div>`;
+  }
+};
+
+/* ── pintado ────────────────────────────────────────────────────────────── */
+
+function pintar(){
+  const zona = (z) => (datos.piezas||[]).filter(p => p.zona === z);
+
+  // A
+  const A = zona('A');
+  document.getElementById('A-izq').innerHTML   = A.filter(p=>p.posicion==='izq').map(p=>FORMA.cabecera(p,'A')||'').join('');
+  document.getElementById('A-centro').innerHTML= A.filter(p=>p.posicion==='centro').map(p=>FORMA.cabecera(p,'A')||'').join('');
+  document.getElementById('A-der').innerHTML   = A.filter(p=>p.posicion==='der').map(p=>FORMA.cabecera(p,'A')||'').join('');
+
+  // F
+  const F = document.getElementById('F');
+  const cinta = zona('F').map(p=>FORMA.cinta(p)||'').join('');
+  F.classList.toggle('vacia', !cinta);
+  document.getElementById('F-track').innerHTML = cinta;
+
+  // B
+  const B = zona('B')[0];
+  const elB = document.getElementById('B');
+  const T = document.documentElement.style;
+  if (datos.presentacion && datos.presentacion.colores) {
+    const c = datos.presentacion.colores;
+    if (c.fondo) T.setProperty('--fondo', c.fondo);
+    if (c.secundario) T.setProperty('--acento', c.secundario);
+    if (c.acento) T.setProperty('--texto', c.acento);
+  }
+  if (B) {
+    elB.style.padding = '0';
+    elB.innerHTML = `<div class="bloque-dia${B.imagen?" con-foto":""}">
+      ${B.imagen?`<img class="foto" src="${esc(B.imagen)}" alt=""><div class="velo-b"></div>`:''}
+      <div class="top"><div class="eyebrow">${esc(B.datos && B.datos.rotulo || 'Hoy')}</div><div class="filete"></div></div>
+      <div class="texto">
+        <div class="titulo">${esc(B.titulo)}</div>
+        ${B.subtitulo?`<div class="sub">${esc(B.subtitulo)}</div>`:''}
+      </div>
+      <div class="pie-dia">
+        ${B.precio?`<div class="precio">${esc(B.precio)}</div>`:''}
+        <div class="vig">${esc(B.datos && B.datos.vigencia || '')}</div>
+      </div></div>`;
+  } else elB.style.display = 'none';
+  // D
+  const D = zona('D')[0];
+  const elD = document.getElementById('D');
+  if (D) { elD.innerHTML = FORMA.contacto(D); }
+  else elD.style.display = 'none';
+
+  // E
+  const E = document.getElementById('E');
+  const franjas = zona('E');
+  E.classList.toggle('vacia', !franjas.length);
+  E.innerHTML = franjas.length
+    ? `<div class="rot-e">Al corte · hoy</div>` + franjas.map(p=>FORMA.franja(p)).join('')
+    : '';
+
+  // C · carrusel
+  const marco = document.getElementById('C-marco');
+  const tanda = (datos.piezas||[]).filter(p => p.zona === 'C' && p.cadencia === 'tanda');
+  marco.innerHTML = tanda.map((p,i) => FORMA[p.forma] ? FORMA[p.forma](p, i, tanda.length) : '').join('');
+  arrancarRotacion(tanda.length);
+
+  reloj();
+}
+
+/* ── rotación ───────────────────────────────────────────────────────────── */
+
+let indice = 0, timerRot = null, timerBarra = null;
+
+function arrancarRotacion(n){
+  clearInterval(timerRot); clearInterval(timerBarra);
+  const slides = [...document.querySelectorAll('#C-marco .slide')];
+  if (!slides.length) return;
+  const ini = Number(new URLSearchParams(location.search).get('i') || 0);
+  indice = Math.min(Math.max(ini,0), slides.length-1);
+
+  const activar = () => {
+    slides.forEach((s,i)=>s.classList.toggle('on', i===indice));
+    const barra = document.getElementById('C-barra');
+    barra.style.transition = 'none'; barra.style.width = '0%';
+    requestAnimationFrame(()=>{ barra.style.transition = `width ${SEG_POR_PIEZA}s linear`; barra.style.width = '100%'; });
+  };
+  activar();
+  timerRot = setInterval(()=>{ indice = (indice+1) % slides.length; activar(); }, SEG_POR_PIEZA*1000);
+}
+
+function reloj(){
+  const r = document.getElementById('reloj');
+  if (r) r.textContent = ahoraMadrid().hhmm;
+  const cfg = (datos.piezas||[]).find(p => p.datos && p.datos.tipo === 'estado');
+  const e = estado((cfg && cfg.datos) || {});
+  const p = document.getElementById('punto');
+  if (p) { p.className = 'punto ' + (e.abierto ? 'abierto' : 'cerrado'); }
+  const t = document.getElementById('estado-txt');
+  if (t) t.textContent = e.texto;
+  const s = document.getElementById('estado-sub');
+  if (s) s.textContent = e.sub;
+}
+setInterval(reloj, 1000);
+
+/* ── carga: solo acepta lo que lleva sello ──────────────────────────────── */
+
+function valido(d){
+  return !!(d && d.esquema === 'pantalla-tv/bloques-v1' && d.sello && d.sello.huella && Array.isArray(d.piezas));
+}
+
+function adoptar(d){
+  datos = d;
+  try { localStorage.setItem(CLAVE_ULTIMO, JSON.stringify(d)); } catch {}
+  pintar();
+}
+
+async function cargar(primera){
+  try {
+    const r = await fetch('bloques.json?t=' + Date.now(), { cache:'no-store' });
+    const d = await r.json();
+    if (!valido(d)) {
+      console.warn('piezas sin sello: se ignora y se mantiene la última buena');
+    } else if (!datos || d.sello.huella !== (datos.sello && datos.sello.huella) || d.sello.generado_at !== datos.sello.generado_at) {
+      adoptar(d);
+    }
+  } catch (e) {
+    if (primera) {
+      try { const g = JSON.parse(localStorage.getItem(CLAVE_ULTIMO) || 'null'); if (valido(g)) adoptar(g); } catch {}
+    }
+  }
+}
+
+cargar(true);
+setInterval(()=>cargar(false), 60000);
+</script>
+</body>
+</html>

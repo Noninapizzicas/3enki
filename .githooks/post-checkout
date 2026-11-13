@@ -1,0 +1,43 @@
+#!/bin/bash
+# post-checkout — el worktree PRINCIPAL no cambia de rama. Nunca.
+#
+# POR QUÉ EXISTE (pagado 4 veces el 9-11-nov-2026):
+#   .githooks/pre-commit sólo impide COMMITEAR en main desde ~/3enki. No impide
+#   `git checkout <otra-rama>`, que es lo que dejaba el árbol en una rama de
+#   trabajo: el `git pull --ff-only origin main` del dueño abortaba con
+#   "diverging branches" y el deploy se negaba a correr. El árbol quedaba
+#   secuestrado durante horas sin que nadie se enterara.
+#
+# REGLA: ~/3enki es espejo de origin/main y SÓLO LECTURA (AGENTS.md R1).
+#   Todo trabajo va en un worktree propio:
+#     cd ~/3enki && git worktree add ~/3enki-<slug> -b proyecto/<slug> origin/main
+
+PRINCIPAL="/home/admin/3enki"
+
+# Sólo actúa en el worktree principal
+TOPLEVEL="$(git rev-parse --show-toplevel 2>/dev/null || true)"
+[ "$TOPLEVEL" = "$PRINCIPAL" ] || exit 0
+
+# Rama actual (vacío si HEAD está desprendido)
+RAMA="$(git symbolic-ref --short -q HEAD 2>/dev/null || echo "")"
+
+if [ "$RAMA" != "main" ]; then
+    # Volver a main. Este checkout vuelve a disparar el hook, pero entonces
+    # RAMA = main y sale por el camino normal (sin recursión).
+    git checkout -q main 2>/dev/null || true
+    {
+        echo ""
+        echo "  ✗ ABORTO: ~/3enki es SOLO LECTURA (AGENTS.md · R1)."
+        echo "    Intento: cambiar a '${RAMA:-HEAD desprendido}' — devuelto a main."
+        echo ""
+        echo "    Trabaja en un worktree propio, NO aquí:"
+        echo "      cd ~/3enki && git worktree add ~/3enki-<slug> -b proyecto/<slug> origin/main"
+        echo "      cd ~/3enki-<slug>"
+        echo ""
+        echo "    El deploy y el dueño necesitan este árbol en main."
+        echo ""
+    } >&2
+    exit 1
+fi
+
+exit 0

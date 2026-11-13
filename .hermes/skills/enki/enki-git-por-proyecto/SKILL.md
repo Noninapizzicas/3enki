@@ -1,6 +1,6 @@
 ---
 name: enki-git-por-proyecto
-description: "Flujo git/PR de Enki por proyecto: cada chat trabaja en su rama proyecto/<slug>, main es sagrado, merge+deploy los hace el dueño. Usar cuando un chat de proyecto (edias, the-pirate...) va a editar código, commitear, pushear o crear un PR."
+description: "Flujo git/PR de Enki por proyecto: cada chat trabaja en un WORKTREE propio (~/3enki-<slug>) con su rama proyecto/<slug>; ~/3enki es sólo lectura. Usar cuando un chat de proyecto (edias, the-pirate...) va a editar código, commitear, pushear o crear un PR."
 version: 1.0.0
 author: Hermes Agent
 platforms: [linux]
@@ -16,7 +16,9 @@ Flujo determinista para que **cada chat de proyecto** edite, commitee y cree PRs
 
 ## Realidad del entorno (verificada — NO asumir otra)
 
-- **Repo git**: `/home/admin/3enki` (rama `main`). Es la ÚNICA zona de verdad para código.
+- **Repo git**: `/home/admin/3enki` (rama `main`, **SÓLO LECTURA** — espejo de `origin/main`).
+  Es la ÚNICA zona de verdad para código, pero **no se trabaja dentro**: cada chat
+  crea su worktree (`~/3enki-<SLUG>`).
 - **`/opt/enki`** es el **deploy vivo** (NO es repo git). NO editar código ahí — es el origen de que el Guardian revierta.
 - **hermes** (el chat) puede escribir en el repo: `admin:www-data 664`, hermes ∈ grupo www-data. Puede hacer git local y push (dry-run OK).
 - **MCP de github** configurado con token (`ghp_...`) en `/home/admin/.hermes/config.yaml` → el chat puede crear PRs.
@@ -36,17 +38,22 @@ Antes de tocar git, resolver estas variables del proyecto concreto:
 
 ## Orden determinista (el chat)
 
-1. **Partir de main limpio**:
+1. **Crear un worktree propio** — `~/3enki` NO se toca:
    ```bash
    cd /home/admin/3enki
-   git checkout main && git pull origin main
+   git fetch origin main
+   git worktree add ~/3enki-<SLUG> -b proyecto/<SLUG> origin/main
+   # si la rama ya existe:
+   #   git worktree add ~/3enki-<SLUG> proyecto/<SLUG>
+   cd ~/3enki-<SLUG>
    ```
-2. **Crear/entrar en la rama del proyecto**:
-   ```bash
-   git checkout -b proyecto/<SLUG>   # si no existe
-   # o: git checkout proyecto/<SLUG>  si ya existe
-   ```
-3. **Editar** en el repo (NO en `/opt/enki`): `modules/<MODULO>/...`
+   `~/3enki` es el espejo de `origin/main` y **sólo lectura**: el deploy y el
+   dueño lo necesitan en `main`. Un `git checkout` aquí lo secuestra y rompe el
+   `git pull --ff-only` y el deploy (pasó 4 veces: `vertical/qr`,
+   `esquema/qr-contextual`, `app/enki-bridge`, `proyecto/instagram-bridge`).
+   El hook `.githooks/post-checkout` lo revierte, pero no lo intentes.
+2. **Trabajar siempre dentro del worktree** (`cd ~/3enki-<SLUG>`).
+3. **Editar** ahí (NO en `/opt/enki`): `modules/<MODULO>/...`
 4. **Commit** con mensaje convencional:
    ```bash
    git add modules/<MODULO>/...
@@ -61,7 +68,9 @@ Antes de tocar git, resolver estas variables del proyecto concreto:
 
 ## Reglas de oro
 
-- **Cada chat: su rama `proyecto/<SLUG>`, su trabajo, sus commits.** Nunca tocar `main` directo.
+- **`~/3enki` es SÓLO LECTURA.** Nunca `git checkout` ni editar ahí: es el espejo
+  de `origin/main` que usan el dueño y el deploy. Cada chat, su worktree
+  (`~/3enki-<SLUG>`) en su rama `proyecto/<SLUG>`. Nunca tocar `main` directo.
 - **`main` es sagrado** — solo recibe merges verificados (los hace el dueño).
 - **Si un proyecto la lía**: se revierte/descarta SU rama, sin afectar a los demás (aislamiento por rama).
 - **NO editar en `/opt/enki`** para código — es el deploy, no el repo.
@@ -71,9 +80,11 @@ Antes de tocar git, resolver estas variables del proyecto concreto:
 
 1. Revisar el PR de `proyecto/<SLUG>`.
 2. **Merge** (squash) → main.
-3. **Deploy inmediato** (< 15 min, antes del Guardian):
+3. **Deploy inmediato** (< 15 min, antes del Guardian) **desde `~/3enki`**.
+   El dueño es el ÚNICO que trabaja ahí, y sólo en `main`:
    ```bash
-   cd /home/admin/3enki && git pull origin main && sudo ./deployment/deploy.sh && sudo systemctl restart enki
+   cd ~/3enki && git checkout main && git pull --ff-only origin main
+   sudo ./deployment/vps-setup.sh <dominio>
    ```
 4. Borrar la rama `proyecto/<SLUG>` local y remota tras merge.
 
@@ -87,3 +98,8 @@ Antes de tocar git, resolver estas variables del proyecto concreto:
   ```
 - **`/opt/enki` no es repo**: si un chat insiste en editar ahí, corregirle la ruta al repo.
 - **Rama huérfana**: si un PR queda sin mergear y su cambio ya está en main por otra vía, cerrarlo (no mergear redundante).
+- **`git checkout` en `~/3enki`**: PROHIBIDO. Deja el árbol en una rama de trabajo y
+  el `git pull --ff-only origin main` del dueño aborta con «diverging branches»;
+  el deploy se niega a correr (`[ERROR] ABORTO: el árbol NO está en origin/main`).
+  Si ya pasó: `git stash push -u` → `git checkout main` → `git pull --ff-only`.
+  El hook `.githooks/post-checkout` lo revierte solo.

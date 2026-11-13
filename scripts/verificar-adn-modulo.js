@@ -78,7 +78,11 @@ function arrayDe(v) {
 // manifiesto (producto-manager · cobro · insumos). Si solo se leyera el
 // manifiesto, R3 daría FALSOS POSITIVOS (decir "nadie lo emite" cuando el código
 // sí lo emite). El manifiesto y el código son dos fuentes: se miran las dos.
-const RE_PUBLISH = /(?:eventBus|bus)\s*\??\.\s*publish\s*\(\s*['"`]([a-z0-9_.*-]+)['"`]/gi;
+// OJO: `publish?.(` (llamada con optional chaining DESPUÉS del método) es la forma
+// que usa medio repo (`this.eventBus?.publish?.('x', …)`). Sin contemplarla, R3
+// cantaba fantasmas: decía «nadie lo emite» de eventos que sí se emiten —
+// medido con `servicio.cambiado` en pizzepos/pedidos (12-nov-2026).
+const RE_PUBLISH = /(?:eventBus|bus)\s*\??\.\s*publish\s*\??\.?\s*\(\s*['"`]([a-z0-9_.*-]+)['"`]/gi;
 
 function emiteEnCodigo(dir) {
   const out = new Set();

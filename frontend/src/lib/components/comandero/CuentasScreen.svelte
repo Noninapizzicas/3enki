@@ -119,7 +119,12 @@
     }
   }
 
-  const tipos: TipoCuenta[] = ['local', 'delivery', 'llevar'];
+  // El botón de Delivery lo ocupa TROZOS: es lo que de verdad se usa en el
+  // mostrador (elegir las pizzas del día, mandarlas a cocina y que se anuncien
+  // en la pantalla de la calle). Delivery sigue siendo un tipo válido del
+  // sistema —las cuentas de teléfono se pintan como delivery—, pero ya no se
+  // abre desde aquí porque no hay reparto propio.
+  const tipos: TipoCuenta[] = ['local', 'trozos', 'llevar'];
 
   onMount(() => {
     updateClock();

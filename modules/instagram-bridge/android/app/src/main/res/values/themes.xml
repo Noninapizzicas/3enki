@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!--
+      Tema Material del sistema, sin `com.google.android.material`: la pantalla es
+      una lista de estados y tres botones, y añadir la libreria de Material
+      Components solo por el estilo seria una dependencia mas que revisar. El dia
+      que la UI crezca, se cambia el `parent` a `Theme.Material3.DayNight` y se
+      añade la dependencia; el resto de los recursos no se toca.
+    -->
+    <style name="Theme.InstagramBridge" parent="android:Theme.Material.Light.NoActionBar">
+        <item name="android:colorPrimary">#1F6FEB</item>
+        <item name="android:colorAccent">#1F6FEB</item>
+        <item name="android:windowBackground">#FFFFFFFF</item>
+    </style>
+</resources>

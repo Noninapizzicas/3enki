@@ -1,0 +1,554 @@
+{
+  "_doc": "BLOQUE 11a · PUBLICAR Y SUS FRONTERAS del proyecto instagram-bridge. Cinco piezas y una sola pregunta de fondo: que puede salir, que se puede deshacer y a quien no se le escribe. L1 PreparadorDePieza (operacion/piezas.js, CONVERSOR): la unica frontera de formato del sistema; `admitir` no toca nada y dice que falta exactamente, `adaptar` recorta frases ENTERAS por el final y el resultado es un PREFIJO del original (por eso no puede invertir el sentido ni comerse un dato: no añade, no reordena, no corta una frase por la mitad), y si la primera frase no cabe se rechaza en vez de recortarla. Los adjuntos no se procesan aqui: se declara el ENCUADRE (proporcion admitida mas cercana y cuanto se conserva) y el recorte de pixels lo hace el aparato. L3 RetiradaDePublicacion (operacion/retirada.js, PUENTE): retirar, corregir y borrar caen en la MISMA casilla (borrar) porque las tres son irreversibles y visibles; RETIRAR PASA POR PERMISO AUNQUE EL NIVEL DECLARADO SEA EJECUTAR, y eso se hace ejecutable poniendole TECHO 'permiso' al nivel ANTES de preguntar a Q6 (el nivel no es un cheque en blanco para deshacer); despues, en orden: respaldo de lo que habia (sin respaldo no se retira), la mano (que se inyecta: este modulo no ejecuta), la verificacion (O: 'ya no esta' es una consecuencia observable) y la evidencia (O3, anclada al respaldo). A5: un fallo de la mano va a revision y NO se reintenta. M3 RecorteDePrivacidad (core/recorte.js, REFLEJO): minimiza ANTES de guardar con lista CERRADA de lo que se conserva; lo que no se guardo no hay que borrarlo, el texto del mensaje no se reescribe (se avisa si trae un dato) y `auditar` es el test permanente sobre lo ya guardado. S1 DestinatarioPrevio (puente/destinatario.js, REFLEJO): solo se responde a quien escribio primero, se comprueba en CADA envio (no al configurar), se contesta en el mismo hilo y del mismo tipo, y si abrimos nosotros la conversacion no se contesta aunque luego nos respondan. S2 DetectorDeFueraDeAlcance (puente/alcance.js, REFLEJO, reglas y no LLM): crecimiento fuera, operacion dentro, se detecta por FORMA (tabla cerrada y ordenada); diez cuentas DISTINTAS con el mismo texto es fuera de alcance, pero repetir el propio mensaje no lo es (se cuentan cuentas, no mensajes) y se responde nombrando la frontera, sin negociar una 'version pequena'. Origen: plan-construccion.md bloque 11 (L1, L3, M3, S1, S2) y diseno-oop.md. BLOQUE 11b · LEER Y RESPONDER (seis piezas). M1 RetratoFechado (operacion/retratos.js, CUSTODIO): la foto de la cuenta con su fecha y, sobre todo, con la fecha de CADA dato; un dato sin `leido_en` se rechaza con su nombre (`dato_sin_fecha`) y un dato posterior a la foto tambien, porque un dato sin fecha es una opinion y una foto que dice mas de lo que sabia es peor que no tener foto. Append-only: la foto no se corrige, se toma otra; reenviar el mismo `retrato_id` es idempotente, reenviarlo con otros datos es `retrato_id_ya_usado_con_otros_datos`. M2 CambioDesdeUltimaLectura (core/cambio.js, REFLEJO): sin retrato anterior hay PRIMERA LECTURA, no cambio —`delta: null`, `hay_delta: false`, `sin_cambio: false`— y lo mismo con un anterior de otra cuenta, ilegible o sin fecha; un anterior posterior o del mismo instante se rechaza (`no_comparable`) porque el delta saldria con el signo cambiado. Los datos sin fecha del retrato actual se OMITEN y se nombran (`omitidos`); si todos vienen sin fecha, no hay nada comparable. N1 BandejaDeEspera (operacion/bandeja.js, CUSTODIO): lo que espera respuesta, en FIFO; contestado exige `veredicto: 'ocurrio'` Y `evidencia_id`, y sin ellos la marca se RECHAZA y la fila SIGUE en la bandeja (no se cierra con un aviso); lo contestado no se reabre y un silencio firmado no puede cerrar una queja. N2 ClasificadorDeLlegada (operacion/llegada.js, MICRO-AGENTE): un mensaje ininteligible es DELICADO, no ruido: `destino: 'escalar'`, `se_descarta: false`, aunque no haya LLM; el juicio es opcional, sincrono y con dos suelos que no puede bajar (lo ilegible y la queja), y si lanza o devuelve basura se usa la tabla. N3 RedactorDeBorrador (operacion/borrador.js, MICRO-AGENTE): escribe con la voz de E1 y sin voz declarada NO redacta (`sin_voz`, modo lectura); no importa fs, path, red ni ningun puerto de envio, y devuelve `se_envia:false`, `se_persiste:false`, `destino:'revision_humana'`; los vetos de la ficha se revisan ANTES de devolver el texto y si ninguna variante los respeta no se devuelve un 'casi'. N5 SilencioElegido (operacion/silencio.js, REFLEJO): una queja no se silencia, se escala, por clase Y por texto (una queja mal clasificada se reclasifica); el spam y el agradecimiento si pueden callarse, lo ininteligible y lo delicado no, y una clase desconocida se responde porque callar por defecto pierde personas.",
+  "name": "operacion",
+  "version": "0.2.0",
+  "description": "Publicar y sus fronteras: preparador de pieza (conversor que recorta sin cambiar el sentido), retirada de publicacion (puente que siempre pasa por permiso, respalda antes de tocar y verifica despues), recorte de privacidad (minimiza antes de guardar), destinatario previo (solo se responde a quien escribio primero) y detector de fuera de alcance (mismo texto a varias cuentas). Custodio single-writer del respaldo previo a una retirada en storage/instagram-bridge/respaldos-retirada.json, escritura temporal + rename. Bloque 11b: retrato fechado y bandeja de espera (custodios single-writer con auditoria), cambio desde la ultima lectura y silencio elegido (reflejos puros), clasificador de llegada y redactor de borrador (micro-agentes con tabla cerrada, sin LLM obligatorio). Un borrador nunca envia ni persiste; una queja nunca se silencia.",
+  "language": "es",
+  "main": "index.js",
+  "dependencies": [],
+  "config": {
+    "persistence": {
+      "concurrency": "single-writer",
+      "scope": "por-proyecto",
+      "pattern": "single-json-file",
+      "paths": [
+        "storage/instagram-bridge/respaldos-retirada.json",
+        "storage/instagram-bridge/retratos.json",
+        "storage/instagram-bridge/bandeja.json"
+      ],
+      "esquemas": {
+        "respaldos": "respaldos-retirada-v1",
+        "retratos": "retratos-fechados-v1",
+        "bandeja": "bandeja-de-espera-v1"
+      },
+      "escritura": "temporal + rename (atomica), un candado en proceso",
+      "regla": "append-only en los tres: un respaldo, una foto y una espera no se editan ni se borran (borrarlos seria borrar la prueba de lo que habia). Las mutaciones de la bandeja cambian el ESTADO de una espera, no la reescriben."
+    },
+    "plataformas": [
+      "instagram"
+    ],
+    "piezas": {
+      "L1": {
+        "nombre": "PreparadorDePieza",
+        "forma": "conversor",
+        "fichero": "operacion/piezas.js"
+      },
+      "L3": {
+        "nombre": "RetiradaDePublicacion",
+        "forma": "puente",
+        "fichero": "operacion/retirada.js"
+      },
+      "M3": {
+        "nombre": "RecorteDePrivacidad",
+        "forma": "reflejo",
+        "fichero": "core/recorte.js"
+      },
+      "S1": {
+        "nombre": "DestinatarioPrevio",
+        "forma": "reflejo",
+        "fichero": "puente/destinatario.js"
+      },
+      "S2": {
+        "nombre": "DetectorDeFueraDeAlcance",
+        "forma": "reflejo",
+        "fichero": "puente/alcance.js"
+      },
+      "M1": {
+        "nombre": "RetratoFechado",
+        "forma": "custodio",
+        "fichero": "operacion/retratos.js"
+      },
+      "M2": {
+        "nombre": "CambioDesdeUltimaLectura",
+        "forma": "reflejo",
+        "fichero": "core/cambio.js"
+      },
+      "N1": {
+        "nombre": "BandejaDeEspera",
+        "forma": "custodio",
+        "fichero": "operacion/bandeja.js"
+      },
+      "N2": {
+        "nombre": "ClasificadorDeLlegada",
+        "forma": "micro-agente",
+        "fichero": "operacion/llegada.js"
+      },
+      "N3": {
+        "nombre": "RedactorDeBorrador",
+        "forma": "micro-agente",
+        "fichero": "operacion/borrador.js"
+      },
+      "N5": {
+        "nombre": "SilencioElegido",
+        "forma": "reflejo",
+        "fichero": "operacion/silencio.js"
+      }
+    },
+    "formato": {
+      "destinos": [
+        "publicacion",
+        "historia",
+        "reel"
+      ],
+      "campos_de_texto": [
+        "texto",
+        "caption",
+        "pie",
+        "titulo",
+        "descripcion"
+      ],
+      "texto_max": 2200,
+      "adjuntos_max": 10,
+      "regla_del_recorte": "frases enteras por el final; el resultado es un prefijo del original; la primera frase no se toca",
+      "regla_del_encuadre": "se declara la proporcion admitida mas cercana y lo que se conserva; si se perderia lo que la pieza ensena, se rechaza",
+      "ejecuta_el_recorte": "aparato",
+      "no_publica": true
+    },
+    "retirada": {
+      "operaciones": [
+        "retirar",
+        "corregir",
+        "borrar"
+      ],
+      "veredictos": [
+        "retirada",
+        "no_retirada",
+        "revision"
+      ],
+      "casilla": "borrar (las tres operaciones: borrar el feed, corregir lo publicado y borrar son irreversibles y visibles)",
+      "techo_de_nivel": "permiso",
+      "orden_de_pasos": [
+        "forma",
+        "permiso",
+        "respaldo",
+        "mano",
+        "verificacion",
+        "evidencia"
+      ],
+      "puertos": {
+        "permiso": "autonomia/politica.js (Q6), por defecto la real",
+        "respaldo": "operacion/index.js#RespaldoDeRetiradas (custodio local)",
+        "mano": "A3, inyectado; sin mano no hay retirada (sin_puerto)",
+        "verificador": "O, inyectado; sin verificador el veredicto es revision, nunca retirada",
+        "evidencia": "puente/evidencia.js (O3)"
+      },
+      "no_reintenta": true
+    },
+    "privacidad": {
+      "se_conserva": [
+        "sello",
+        "cuenta",
+        "plataforma",
+        "conversacion_id",
+        "mensaje_id",
+        "remitente",
+        "texto",
+        "momento",
+        "tipo"
+      ],
+      "motivos_para_conservar": [
+        "responder",
+        "no_repetir"
+      ],
+      "el_texto_no_se_reescribe": true,
+      "momento": "antes de guardar, no despues"
+    },
+    "destinatario": {
+      "regla": "solo se responde a quien escribio primero",
+      "se_comprueba": "antes de cada envio, no al configurar",
+      "tipos_de_hilo": [
+        "comentario",
+        "dm"
+      ],
+      "prohibido": [
+        "abrir_conversacion",
+        "escribir_primero",
+        "contestar_en_otro_hilo"
+      ]
+    },
+    "alcance": {
+      "umbral_cuentas_distintas": 3,
+      "umbral_destinatarios": 20,
+      "umbral_parecido": 0.85,
+      "se_detecta_por": "forma de la peticion, no por tamano",
+      "protege": "repetir el propio mensaje no es volumen: se cuentan cuentas distintas, no mensajes",
+      "negociable": false
+    },
+    "invariantes": [
+      "recortar_no_puede_invertir_el_sentido",
+      "el_recorte_es_un_prefijo_del_original",
+      "una_frase_no_se_corta_por_la_mitad",
+      "retirar_pasa_por_permiso_aunque_el_nivel_sea_ejecutar",
+      "sin_respaldo_previo_no_se_retira",
+      "lo_que_no_se_guardo_no_hay_que_borrarlo",
+      "si_no_hay_mensaje_previo_no_hay_envio",
+      "diez_cuentas_con_el_mismo_texto_es_fuera_de_alcance",
+      "repetir_el_propio_mensaje_no_es_volumen",
+      "un_fallo_de_la_mano_no_se_reintenta",
+      "un_dato_sin_fecha_es_una_opinion",
+      "sin_retrato_anterior_hay_primera_lectura_no_cambio",
+      "contestado_sin_veredicto_ocurrio_se_rechaza",
+      "mensaje_ininteligible_es_delical_no_ruido",
+      "borrador_nunca_envia_y_nunca_persiste",
+      "una_queja_no_se_silencia_se_escala"
+    ],
+    "lectura_y_respuesta": {
+      "retrato": {
+        "regla": "un dato sin fecha es una opinion",
+        "fecha_de_la_foto": "tomado_en (instante con zona), obligatoria",
+        "fecha_de_cada_dato": "leido_en (instante con zona), obligatoria",
+        "valor_nulo_con_fecha": "es un dato ('no se pudo leer'), no un hueco",
+        "append_only": true,
+        "idempotente_por": "retrato_id",
+        "no_corrige": "una foto no se edita: se toma otra"
+      },
+      "cambio": {
+        "regla": "sin retrato anterior hay PRIMERA LECTURA, no cambio",
+        "no_son_cambio": [
+          "sin_retrato_anterior",
+          "retrato_anterior_invalido",
+          "retrato_anterior_de_otra_cuenta",
+          "retrato_anterior_sin_fecha"
+        ],
+        "se_rechaza": [
+          "retrato_anterior_no_es_anterior",
+          "mismo_momento"
+        ],
+        "datos_sin_fecha": "se omiten y se nombran; si todos lo estan, no_comparable"
+      },
+      "bandeja": {
+        "regla": "contestado sin veredicto 'ocurrio' se RECHAZA",
+        "exige": [
+          "veredicto=ocurrio",
+          "evidencia_id",
+          "contestado_en >= momento"
+        ],
+        "al_rechazar": "la espera SIGUE en la bandeja (estado esperando)",
+        "no_reabre": "lo contestado no vuelve a esperando",
+        "silencio": "solo con decision de N5; una queja se rechaza aunque la decision venga firmada",
+        "orden": "FIFO por momento de llegada"
+      },
+      "llegada": {
+        "regla": "un mensaje ININTELIGIBLE es delicado, no ruido",
+        "clases": [
+          "consulta",
+          "pedido",
+          "queja",
+          "agradecimiento",
+          "spam",
+          "ininteligible"
+        ],
+        "destinos": [
+          "responder",
+          "escalar",
+          "archivar"
+        ],
+        "ininteligible": {
+          "delicado": true,
+          "destino": "escalar",
+          "se_descarta": false
+        },
+        "sin_llm": "tabla cerrada de lexico y forma; el juicio es opcional y sincrono",
+        "suelos_que_el_juicio_no_baja": [
+          "queja",
+          "ininteligible"
+        ],
+        "nunca_lanza": true
+      },
+      "borrador": {
+        "regla": "un borrador NUNCA envia y NUNCA persiste",
+        "sin_voz": "no redacta: motivo sin_voz, modo lectura, texto null",
+        "no_importa": [
+          "fs",
+          "path",
+          "http",
+          "puerto de envio"
+        ],
+        "devuelve": {
+          "se_envia": false,
+          "se_persiste": false,
+          "envio": null,
+          "persistencia": null,
+          "destino": "revision_humana"
+        },
+        "vetos": [
+          "lo_que_nunca_dice",
+          "limites_de_tema"
+        ],
+        "si_ninguna_variante_respeta_la_voz": "sin_redaccion (no se devuelve un 'casi')"
+      },
+      "silencio": {
+        "regla": "una QUEJA no se silencia, se escala",
+        "por_clase_y_por_texto": true,
+        "se_puede_callar": [
+          "spam",
+          "agradecimiento"
+        ],
+        "no_se_calla": [
+          "queja",
+          "ininteligible",
+          "delicado"
+        ],
+        "clase_desconocida": "se responde (el defecto seguro no es callar)"
+      },
+      "micro_agentes": {
+        "llm": "opcional e inyectable (opts.juicio_llegada / opts.juicio_borrador)",
+        "sin_llm": "tabla cerrada determinista",
+        "si_el_juicio_falla": "se usa la tabla, con aviso",
+        "sincrono": true
+      }
+    }
+  },
+  "subscribes": [
+    {
+      "event": "instagram.operacion.pieza.admitir.request",
+      "handler": "onPiezaAdmitirRequest",
+      "description": "L1 · comprueba que la pieza cabe en la plataforma y el destino, SIN adaptarla. Rechaza con `que_falta` exacto (caracteres, MB, segundos de mas)."
+    },
+    {
+      "event": "instagram.operacion.pieza.preparar.request",
+      "handler": "onPiezaPrepararRequest",
+      "description": "L1 · prepara la pieza: recorta el texto por frases enteras (prefijo del original) y declara el encuadre de los adjuntos. Si no cabe sin cambiar lo que dice, rechaza con su motivo."
+    },
+    {
+      "event": "instagram.operacion.retirada.request",
+      "handler": "onRetiradaRequest",
+      "description": "L3 · retirar / corregir / borrar (campo `operacion`). Siempre pasa por Q6 con el nivel CON TECHO `permiso`; respalda lo que habia antes de tocar la mano, verifica con O y deja evidencia O3. Sin mano, sin respaldo o sin verificador devuelve el puerto que falta o revision."
+    },
+    {
+      "event": "instagram.operacion.recorte.recortar.request",
+      "handler": "onRecorteRecortarRequest",
+      "description": "M3 · recorta un hecho visible ANTES de guardarlo: lista cerrada de lo que se conserva, cada descarte con su motivo, y `puede_responder` dice si queda utilizable."
+    },
+    {
+      "event": "instagram.operacion.recorte.auditar.request",
+      "handler": "onRecorteAuditarRequest",
+      "description": "M3 · audita un retrato ya guardado y devuelve la lista de excesos (campos de la tabla de descartes, valores con forma de identificador y campos fuera de la lista)."
+    },
+    {
+      "event": "instagram.operacion.destinatario.comprobar.request",
+      "handler": "onDestinatarioComprobarRequest",
+      "description": "S1 · comprueba, antes de un envio, que la persona escribio primero, que se contesta en el mismo hilo y del mismo tipo, y devuelve la prueba del mensaje previo."
+    },
+    {
+      "event": "instagram.operacion.alcance.detectar.request",
+      "handler": "onAlcanceDetectarRequest",
+      "description": "S2 · decide si una peticion o un envio es operacion (dentro) o crecimiento (fuera), por forma y por cuentas distintas con el mismo texto. Devuelve motivo y frase de frontera."
+    },
+    {
+      "event": "instagram.operacion.retrato.tomar.request",
+      "handler": "onRetratoTomarRequest",
+      "description": "M1 · custodia una foto fechada. Rechaza `dato_sin_fecha` nombrando el dato, `dato_posterior_al_retrato` y `retrato_id_ya_usado_con_otros_datos`. Append-only e idempotente por `retrato_id`."
+    },
+    {
+      "event": "instagram.operacion.retrato.ultimo.request",
+      "handler": "onRetratoUltimoRequest",
+      "description": "M1 · la ultima foto de la cuenta (`sello`), por `tomado_en`; nunca la de otra cuenta."
+    },
+    {
+      "event": "instagram.operacion.retrato.historial.request",
+      "handler": "onRetratoHistorialRequest",
+      "description": "M1 · todas las fotos de la cuenta, de la mas vieja a la mas nueva."
+    },
+    {
+      "event": "instagram.operacion.retrato.auditar.request",
+      "handler": "onRetratoAuditarRequest",
+      "description": "M1 · auditoria permanente del almacen: datos sin fecha, posteriores a la foto, secretos (V1) y sello (P1)."
+    },
+    {
+      "event": "instagram.operacion.cambio.comparar.request",
+      "handler": "onCambioCompararRequest",
+      "description": "M2 · compara dos lecturas. Sin anterior: `primera_lectura` con `delta:null`. Con `historial`, elige la inmediatamente anterior del mismo sello. Reflejo puro."
+    },
+    {
+      "event": "instagram.operacion.bandeja.entrar.request",
+      "handler": "onBandejaEntrarRequest",
+      "description": "N1 · anota una llegada que espera respuesta. Idempotente por conversacion+mensaje; lo contestado no se reabre."
+    },
+    {
+      "event": "instagram.operacion.bandeja.pendientes.request",
+      "handler": "onBandejaPendientesRequest",
+      "description": "N1 · lo que sigue esperando, en orden de llegada (FIFO), filtrado por cuenta."
+    },
+    {
+      "event": "instagram.operacion.bandeja.resumen.request",
+      "handler": "onBandejaResumenRequest",
+      "description": "N1 · cuantas esperan, cuantas contestadas y cuantas silenciadas, por cuenta."
+    },
+    {
+      "event": "instagram.operacion.bandeja.contestar.request",
+      "handler": "onBandejaContestarRequest",
+      "description": "N1 · marca contestada SOLO con `veredicto: 'ocurrio'` y `evidencia_id`; sin ellos se rechaza y la fila sigue esperando."
+    },
+    {
+      "event": "instagram.operacion.bandeja.silenciar.request",
+      "handler": "onBandejaSilenciarRequest",
+      "description": "N1 · guarda un silencio decidido por N5. Una queja se rechaza aunque la decision venga firmada."
+    },
+    {
+      "event": "instagram.operacion.llegada.clasificar.request",
+      "handler": "onLlegadaClasificarRequest",
+      "description": "N2 · clasifica una llegada (consulta, pedido, queja, agradecimiento, spam, ininteligible). Un ininteligible es delicado y se escala; sin LLM decide la tabla cerrada."
+    },
+    {
+      "event": "instagram.operacion.borrador.redactar.request",
+      "handler": "onBorradorRedactarRequest",
+      "description": "N3 · redacta un borrador con la voz de la ficha. Nunca envia ni persiste; sin voz devuelve `sin_voz` y modo lectura."
+    },
+    {
+      "event": "instagram.operacion.silencio.decidir.request",
+      "handler": "onSilencioDecidirRequest",
+      "description": "N5 · decide responder, callar o escalar. Una queja se escala por clase y por texto; solo spam y agradecimiento pueden callarse."
+    }
+  ],
+  "publishes": [
+    {
+      "event": "instagram.operacion.pieza.admitir.response",
+      "description": "Pieza admitida con sus encuadres, o rechazo con `que_falta`."
+    },
+    {
+      "event": "instagram.operacion.pieza.admitir.failed",
+      "description": "Par de fallo: sin_mensaje, plataforma_desconocida, destino_desconocido, texto_no_cabe, pesa_de_mas, duracion_de_mas, adjuntos_de_mas, entrada_invalida."
+    },
+    {
+      "event": "instagram.operacion.pieza.preparar.response",
+      "description": "Pieza preparada con `recorte` (que se quito, con el original) y `encuadres`."
+    },
+    {
+      "event": "instagram.operacion.pieza.preparar.failed",
+      "description": "Par de fallo: texto_no_cabe_sin_cambiar_el_sentido, proporcion_no_admisible, sin_mensaje, pesa_de_mas, duracion_de_mas, adjuntos_de_mas."
+    },
+    {
+      "event": "instagram.operacion.retirada.response",
+      "description": "Retirada ejecutada y verificada: veredicto, autorizacion_id, techo aplicado, respaldo_id y evidencia."
+    },
+    {
+      "event": "instagram.operacion.retirada.failed",
+      "description": "Par de fallo: retirada_exige_permiso, nivel_conservador_no_retira, permiso_denegado, sin_respaldo_previo, paso_fallido, sin_verificador, no_se_observo_que_ya_no_esta, sin_puerto, sin_sello_de_cuenta, sin_momento."
+    },
+    {
+      "event": "instagram.operacion.recorte.recortar.response",
+      "description": "Hecho recortado con `conservado`, `descartado`, `avisos`, `faltan` y `puede_responder`."
+    },
+    {
+      "event": "instagram.operacion.recorte.recortar.failed",
+      "description": "Par de fallo: entrada_invalida."
+    },
+    {
+      "event": "instagram.operacion.recorte.auditar.response",
+      "description": "`ok` con la lista de excesos (vacia si el retrato esta limpio)."
+    },
+    {
+      "event": "instagram.operacion.recorte.auditar.failed",
+      "description": "Par de fallo: retrato invalido."
+    },
+    {
+      "event": "instagram.operacion.destinatario.comprobar.response",
+      "description": "Legitimo con su prueba, o invalido con el motivo (sin_mensaje_previo, abrimos_nosotros_la_conversacion, hilo_distinto...)."
+    },
+    {
+      "event": "instagram.operacion.destinatario.comprobar.failed",
+      "description": "Par de fallo: entrada_invalida."
+    },
+    {
+      "event": "instagram.operacion.alcance.detectar.response",
+      "description": "Dentro, o fuera con motivo y frase de frontera (`negociable: false`)."
+    },
+    {
+      "event": "instagram.operacion.alcance.detectar.failed",
+      "description": "Par de fallo: entrada_invalida (sin texto ni destinatarios)."
+    },
+    {
+      "event": "instagram.operacion.retrato.tomar.response",
+      "description": "Foto custodiada: `retrato_id`, `tomado_en`, revision. En reintento, `repetido:true`."
+    },
+    {
+      "event": "instagram.operacion.retrato.tomar.failed",
+      "description": "Par de fallo: dato_sin_fecha, dato_posterior_al_retrato, dato_duplicado, sin_datos, sin_sello_de_cuenta, retrato_id_ya_usado_con_otros_datos, sin_retratos."
+    },
+    {
+      "event": "instagram.operacion.retrato.ultimo.response",
+      "description": "La ultima foto con su fecha, o `encontrado:false`."
+    },
+    {
+      "event": "instagram.operacion.retrato.historial.response",
+      "description": "Lista de fotos de la cuenta y total."
+    },
+    {
+      "event": "instagram.operacion.retrato.auditar.response",
+      "description": "`ok` con la lista de problemas (vacia si el almacen esta limpio)."
+    },
+    {
+      "event": "instagram.operacion.cambio.comparar.response",
+      "description": "`tipo` (cambio | primera_lectura), `cambios`, `nuevos`, `desaparecidos`, `delta`, `omitidos` y `resumen`. En primera lectura, `delta:null`."
+    },
+    {
+      "event": "instagram.operacion.cambio.comparar.failed",
+      "description": "Par de fallo: sin_retrato_actual, dato_sin_fecha, sin_datos, retrato_anterior_no_es_anterior, mismo_momento."
+    },
+    {
+      "event": "instagram.operacion.bandeja.entrar.response",
+      "description": "Espera anotada (`espera_id`, estado) o `repetido:true` sin reabrir."
+    },
+    {
+      "event": "instagram.operacion.bandeja.contestar.response",
+      "description": "Espera cerrada con veredicto `ocurrio` y evidencia."
+    },
+    {
+      "event": "instagram.operacion.bandeja.contestar.failed",
+      "description": "Par de fallo: contestado_sin_veredicto_ocurrio, contestado_sin_evidencia, ya_contestada, espera_no_encontrada, momento_invalido."
+    },
+    {
+      "event": "instagram.operacion.bandeja.silenciar.response",
+      "description": "Espera silenciada con su decision y su motivo."
+    },
+    {
+      "event": "instagram.operacion.bandeja.silenciar.failed",
+      "description": "Par de fallo: sin_decision_de_silencio, sin_decision_id, una_queja_no_se_silencia, ya_contestada."
+    },
+    {
+      "event": "instagram.operacion.bandeja.pendientes.response",
+      "description": "Esperas en FIFO y total."
+    },
+    {
+      "event": "instagram.operacion.bandeja.resumen.response",
+      "description": "Conteo por estado y total."
+    },
+    {
+      "event": "instagram.operacion.llegada.clasificar.response",
+      "description": "`clase`, `delicado`, `destino`, `motivos`, `via` (tabla | juicio | fallback) y `se_descarta` (siempre false para lo ininteligible)."
+    },
+    {
+      "event": "instagram.operacion.llegada.clasificar.failed",
+      "description": "No existe: el clasificador nunca falla ni pierde un mensaje; lo que no se entiende se escala."
+    },
+    {
+      "event": "instagram.operacion.borrador.redactar.response",
+      "description": "`texto` con `se_envia:false`, `se_persiste:false` y `destino:'revision_humana'`, o la decision de no redactar (`sin_voz`, `mensaje_ininteligible`, `spam_no_se_contesta`)."
+    },
+    {
+      "event": "instagram.operacion.borrador.redactar.failed",
+      "description": "Par de fallo: entrada_invalida. La ausencia de borrador se publica como decision (ok:true, redacta:false)."
+    },
+    {
+      "event": "instagram.operacion.silencio.decidir.response",
+      "description": "`decision` (responder | silencio | escalar), `motivos`, `escala_a` y, si procede, `reclasificacion:'queja'`."
+    },
+    {
+      "event": "instagram.operacion.silencio.decidir.failed",
+      "description": "Par de fallo: entrada_invalida."
+    }
+  ],
+  "notes": [
+    "L1, M3, S1 y S2 son reflejos puros: sin IO, sin reloj, sin estado global. El unico IO del bloque es el respaldo previo de L3, y vive en index.js.",
+    "L3 no ejecuta, no concede permisos y no verifica: los cuatro puertos se inyectan. Sin ellos devuelve `sin_puerto` con los que faltan, porque un puente sin mano que dice 'hecho' es una mentira con sintaxis correcta.",
+    "El techo de nivel no es una segunda politica: solo impide que el nivel declarado compre una retirada. Q6 sigue decidiendo todo lo demas (casilla, rol, historial, autorizacion, ventana).",
+    "El `momento` entra siempre en el payload: este modulo no tiene reloj. `guardado_en` del respaldo es metadato del fichero, no del negocio.",
+    "S2 se declara reflejo aunque el diseno lo llame micro-agente: un clasificador que a veces dice que si a mandar el mismo texto a diez cuentas no es un detector, es una moneda.",
+    "M1 y N1 comparten el borde de IO (`operacion/custodia.js`): single-writer por cola de promesas, escritura temporal + rename, auditoria antes de cada escritura y un almacen ilegible que NO se sobrescribe. La logica de dominio de cada custodio vive en su fichero, no en el borde.",
+    "M2 y N5 son reflejos puros: sin IO, sin reloj, sin estado. N5 exporta el lexico de queja y N1 lo usa como segunda capa al guardar un silencio, para que la regla no dependa de que el llamante haya consultado a N5.",
+    "N2 y N3 son micro-agentes sin LLM obligatorio: el juicio se inyecta como funcion sincrona y, si falta, lanza, devuelve una promesa o una clase desconocida, se usa la tabla cerrada. Ninguno de los dos falla por no haber LLM.",
+    "El borde fuerza en N3 `se_envia:false`, `se_persiste:false`, `envio:null` y `persistencia:null` aunque la pieza cambiara: un borrador no sale de aqui con permiso de envio.",
+    "N3 no importa `fs`, `path`, red ni ningun puerto de envio. La suite lo comprueba leyendo el fuente, no solo el resultado."
+  ]
+}

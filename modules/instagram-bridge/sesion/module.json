@@ -1,0 +1,196 @@
+{
+  "_doc": "CUSTODIO D2 · CaidaYReautenticacion + H1 · AparatoAusente del proyecto instagram-bridge. Cuando la sesion se cae, decide QUE PASA CON EL TRABAJO EN VUELO: lo reversible (el paso no toco el mundo) vuelve con su paso a la cola; lo irreversible o de consecuencia incierta va a REVISION, para que una persona mire la cuenta antes de que el puente la vuelva a tocar. La reautenticacion es SIEMPRE humana: el sistema detecta la caida, no la repara (quien tiene que ser 'dueno' y hace falta autorizacion_id). H1 es la otra cara: cuando el aparato no esta, el aviso NO se cierra al enviarlo; exige un acuse real de una persona con referencia y momento (nada de fire-and-forget). H3 (ModoDegradado) vive aqui como reflejo puro re-exportado: sin plataforma solo se lee lo ya traido. Origen: plan-construccion.md bloque 8 (D2, H1, H3) y diseno-oop.md.",
+  "name": "sesion-cuentas",
+  "version": "0.1.0",
+  "description": "Custodio de la sesion del puente de Instagram: caida y reautenticacion humana (el trabajo reversible vuelve con su paso, lo irreversible va a revision) y aviso de aparato ausente con acuse real. Single-writer sobre storage/instagram-bridge/{sesion.json,ausente.json}, escritura temporal + rename y auditoria antes de cada escritura.",
+  "language": "es",
+  "main": "index.js",
+  "dependencies": [],
+  "config": {
+    "persistence": {
+      "concurrency": "single-writer",
+      "scope": "global",
+      "pattern": "single-json-file",
+      "paths": [
+        "storage/instagram-bridge/sesion.json",
+        "storage/instagram-bridge/ausente.json"
+      ],
+      "esquemas": {
+        "sesion": "sesion-cuentas-v1",
+        "avisos": "aparato-ausente-v1"
+      },
+      "escritura": "temporal + rename (atomica)"
+    },
+    "plataformas": ["instagram"],
+    "estados_de_sesion": ["operativa", "reauth_pendiente"],
+    "consecuencias_de_paso": ["ninguna", "posible", "incierta"],
+    "desenlaces_de_trabajo": ["vuelve_con_su_paso", "revision", "sin_trabajo_en_vuelo"],
+    "estados_de_trabajo": ["en_cola", "en_revision", "descartado"],
+    "reautenticacion": {
+      "exige": "persona",
+      "quien": "dueno",
+      "requiere_autorizacion_id": true,
+      "el_sistema_no_autoriza": true
+    },
+    "acuse_de_aviso": {
+      "cierra_al_enviar": false,
+      "quien": "dueno",
+      "requiere_referencia": true,
+      "recordatorio_no_es_acuse": true
+    },
+    "degradado": {
+      "solo_lo_ya_traido": true,
+      "permite": ["leer_cache", "consultar_guardado", "listar_traido", "ver_ultimo_estado"],
+      "prohibe": [
+        "publicar",
+        "comentar",
+        "responder_dm",
+        "enviar_dm",
+        "seguir",
+        "dejar_de_seguir",
+        "dar_me_gusta",
+        "subir_historia",
+        "editar_perfil",
+        "borrar",
+        "programar",
+        "etiquetar",
+        "compartir"
+      ]
+    },
+    "invariantes": [
+      "lo_reversible_vuelve_con_su_paso",
+      "lo_irreversible_va_a_revision",
+      "lo_que_no_se_sabe_cae_del_lado_caro",
+      "la_reautenticacion_es_siempre_humana",
+      "una_revision_no_se_cierra_por_reautenticar",
+      "el_aviso_exige_acuse_real",
+      "sin_plataforma_solo_sobrevive_lo_ya_traido"
+    ]
+  },
+  "subscribes": [
+    {
+      "event": "instagram.sesion.caida.registrar.request",
+      "handler": "onCaidaRegistrarRequest",
+      "description": "Registra una caida de sesion y devuelve el destino del trabajo en vuelo: vuelve_con_su_paso (consecuencia 'ninguna'), revision (posible/incierta/no declarada) o sin_trabajo_en_vuelo."
+    },
+    {
+      "event": "instagram.sesion.reautenticar.request",
+      "handler": "onReautenticarRequest",
+      "description": "Marca la sesion como operativa tras una reautenticacion HUMANA. Exige quien='dueno' y autorizacion_id; rechaza con reauth_exige_persona si lo intenta el sistema o el agente. No cierra un trabajo en revision."
+    },
+    {
+      "event": "instagram.sesion.revision.resolver.request",
+      "handler": "onRevisionResolverRequest",
+      "description": "Resuelve un trabajo en revision con permiso humano: volver_a_cola (con su paso) o descartar, con motivo y autorizacion_id."
+    },
+    {
+      "event": "instagram.sesion.consultar.request",
+      "handler": "onConsultarRequest",
+      "description": "Devuelve el asiento de sesion de una cuenta (estado, caida, reautenticacion y trabajo en vuelo)."
+    },
+    {
+      "event": "instagram.sesion.listar.request",
+      "handler": "onListarRequest",
+      "description": "Lista las sesiones de UN proyecto. Sin proyecto rechaza con entrada_invalida: el almacen no se devuelve mezclado (P2)."
+    },
+    {
+      "event": "instagram.aviso.ausente.avisar.request",
+      "handler": "onAvisoAvisarRequest",
+      "description": "Avisa de que el aparato no esta. Nace pendiente_de_acuse; repetirlo es un recordatorio, no un acuse."
+    },
+    {
+      "event": "instagram.aviso.ausente.acusar.request",
+      "handler": "onAvisoAcusarRequest",
+      "description": "Acuse REAL del aviso: exige quien='dueno' y referencia (de donde consta el acuse). Sin eso no se cierra."
+    },
+    {
+      "event": "instagram.aviso.ausente.listar.request",
+      "handler": "onAvisoListarRequest",
+      "description": "Lista los avisos que siguen sin acuse para un proyecto (y opcionalmente un aparato)."
+    },
+    {
+      "event": "instagram.aviso.ausente.resumen.request",
+      "handler": "onAvisoResumenRequest",
+      "description": "Resumen del proyecto: total, pendientes y acusados. 'Cero pendientes' es la unica prueba de que alguien los vio."
+    }
+  ],
+  "publishes": [
+    {
+      "event": "instagram.sesion.caida.registrar.response",
+      "description": "Respuesta correlada: desenlace, trabajo (con su paso) y reautenticacion exigida."
+    },
+    {
+      "event": "instagram.sesion.caida.registrar.failed",
+      "description": "Par de fallo: entrada_incompleta, secreto_recibido, sin_sesion, almacen_no_auditado."
+    },
+    {
+      "event": "instagram.sesion.reautenticar.response",
+      "description": "Respuesta correlada: sesion operativa y, si la habia, trabajo_queda_en_revision."
+    },
+    {
+      "event": "instagram.sesion.reautenticar.failed",
+      "description": "Par de fallo: reauth_exige_persona, cuenta_desconocida, ya_operativa, sin_autorizacion, entrada_incompleta."
+    },
+    {
+      "event": "instagram.sesion.revision.resolver.response",
+      "description": "Respuesta correlada: trabajo devuelto a la cola (con su paso) o descartado, con el motivo de la persona."
+    },
+    {
+      "event": "instagram.sesion.revision.resolver.failed",
+      "description": "Par de fallo: sin_revision, reauth_exige_persona, decision_no_declarada, cuenta_desconocida."
+    },
+    {
+      "event": "instagram.sesion.consultar.response",
+      "description": "Respuesta correlada: asiento de sesion (o null) y hallada."
+    },
+    {
+      "event": "instagram.sesion.consultar.failed",
+      "description": "Par de fallo: sin_sesion, entrada_invalida."
+    },
+    {
+      "event": "instagram.sesion.listar.response",
+      "description": "Respuesta correlada: sesiones del proyecto pedido."
+    },
+    {
+      "event": "instagram.sesion.listar.failed",
+      "description": "Par de fallo: entrada_invalida, sin_sesion."
+    },
+    {
+      "event": "instagram.aviso.ausente.avisar.response",
+      "description": "Respuesta correlada: aviso pendiente_de_acuse, con requiere_acuse=true y cerrado=false."
+    },
+    {
+      "event": "instagram.aviso.ausente.avisar.failed",
+      "description": "Par de fallo: entrada_incompleta, secreto_recibido, sin_avisos, almacen_no_auditado."
+    },
+    {
+      "event": "instagram.aviso.ausente.acusar.response",
+      "description": "Respuesta correlada: aviso acusado con quien, momento y referencia."
+    },
+    {
+      "event": "instagram.aviso.ausente.acusar.failed",
+      "description": "Par de fallo: acuse_no_humano, acuse_sin_referencia, aviso_desconocido, entrada_incompleta."
+    },
+    {
+      "event": "instagram.aviso.ausente.listar.response",
+      "description": "Respuesta correlada: avisos pendientes del proyecto."
+    },
+    {
+      "event": "instagram.aviso.ausente.listar.failed",
+      "description": "Par de fallo: ambito_incompleto, sin_avisos."
+    },
+    {
+      "event": "instagram.aviso.ausente.resumen.response",
+      "description": "Respuesta correlada: total, pendientes, acusados y todo_acusado."
+    },
+    {
+      "event": "instagram.aviso.ausente.resumen.failed",
+      "description": "Par de fallo: ambito_incompleto, sin_avisos."
+    }
+  ],
+  "notes": [
+    "H3 · ModoDegradado (sesion/degradado.js) es REFLEJO PURO y se re-exporta desde index.js: no tiene almacen propio ni candado, porque el modo viaja con cada llamada en vez de vivir en un estado global.",
+    "El aviso por aparato ausente no cierra nada al enviarse: el unico cierre es un acuse de 'dueno' con referencia y momento. El envio se guarda como notificado_en y los reintentos como recordatorios.",
+    "Un trabajo en revision NO se cierra reautenticando: la sesion puede volver a estar operativa y la duda sobre si el paso ocurrio sigue abierta hasta que una persona la resuelva con autorizacion_id."
+  ]
+}

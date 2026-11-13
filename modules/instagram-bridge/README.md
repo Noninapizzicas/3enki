@@ -1358,9 +1358,18 @@ escritorio, se quitaron los `cfg` de `jni` y `mano::android` -> `cargo check
 (`Estado::Reconectando`, `esperar_con_parada`, el bucle), que es donde un error se
 paga en el movil.
 
-Lo que **no** se puede verificar en este servidor: que Kotlin compile (no hay
-`kotlinc` ni Android SDK) y que el Keystore del movil concrete. Eso lo dice el
-workflow, que compila el APK en cada push, y el primer arranque en el aparato.
+Aqui **no** hay `kotlinc` ni Android SDK, asi que la capa Kotlin no se compila en
+este servidor. Lo dice el workflow, y con este bloque lo dijo: `APK Instagram
+Bridge` en verde, con `instagram-bridge-apk` (11 MB) subido como artefacto y los
+97 tests del crate pasando dentro del runner. La primera vuelta salio roja por un
+detalle que solo se ve al compilar: `KeyStore` **no** tiene un `load` de un
+argumento que acepte un `InputStream` (el de un argumento es el de
+`LoadStoreParameter`), asi que el llavero se abre con `load(null, null)`. Queda
+escrito en `Credenciales.llaveroDelSistema()`.
+
+Lo que sigue sin verificarse hasta tener el movil en la mano: que el Keystore de
+ese aparato concreto cree la clave AES y que el dato sobreviva a que MIUI mate el
+proceso. Eso lo dice el primer arranque de verdad.
 
 ## Tests
 

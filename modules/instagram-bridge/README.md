@@ -1068,6 +1068,134 @@ Lo que **no** se puede verificar en este servidor: que Kotlin compile (no hay
 El APK lo compila el workflow; la prueba de verdad es publicar la orden de
 arriba con el movil en segundo plano y leer el `volcado` del resultado.
 
+## Bloque 19d · El interprete de pasos
+
+Para grabar la receta de `publicar` hace falta descubrir el flujo REAL de
+Instagram: que se toca, en que orden, que aparece despues. Eso no se escribe desde
+el servidor adivinando `view_id`s ni se graba "cuando funcione": se pilota el movil
+PASO A PASO y se comprueba cada paso con una mirada.
+
+Este bloque añade la accion `paso`: UN paso suelto por orden, con su comprobacion
+pegada. **No** añade la receta; solo el vocabulario con el que se descubre.
+
+| Pieza | Fichero | Que hace |
+|---|---|---|
+| La accion | `crate/src/canal/bucle.rs` | `ACCION_PASO` en el catalogo cerrado; `Orden` gana `paso` y `observar_despues`; `atender_paso` es el unico camino que mueve el aparato. |
+| El vocabulario | `crate/src/canal/paso.rs` (Rust puro) | Los cuatro tipos, el `AnclaDePaso` (tres pistas, una sola), el parseo estricto y `resolver()`: el ancla sobre la foto, con `ancla_no_encontrada` / `ancla_ambigua` / `ancla_no_tocable` / `ancla_sin_sitio`. |
+| La mano | `crate/src/mano/android.rs` | `ManoDeOrdenes::ejecutar_gesto()`: entrega el gesto ya resuelto y devuelve en el `detalle` **que nodo se toco**. `escribir_en_foco()` y `atras()` son los dos caminos nuevos. |
+| El aparato | `android/.../Gestos.kt` | `tocar` comprueba `isClickable` (`no_tocable`, sin tocar el padre) y recalcula el centro de los bounds vivos; `escribirEnFoco` usa `findFocus(FOCUS_INPUT)` (`campo_no_enfocado`); `atras` ya existia. |
+| El sondeo | `android/.../BucleDeMano.kt` | El tipo `ejecutar` entiende `atras` y el `escribir` sin `id` (campo enfocado). |
+| Los tests | `crate/tests/paso.rs` | 6 nuevos, con una mano falsa que apunta lo que le piden. |
+
+### La orden exacta (primer paso: tocar "Crear")
+
+```text
+topic:   core/core-a/events/bridge/orden/paso
+payload: {"id":"p1","accion":"paso",
+          "paso":{"tipo":"tocar","ancla":{"view_id":"action_bar_left_button"}},
+          "observar_despues":true,"simulacion":false}
+```
+
+`simulacion:false` es OBLIGATORIA: ausente (o `true`) se lee como simulacion y no se
+toca nada. El resultado sale por `core/core-a/events/bridge/resultado`:
+
+```json
+{"id":"p1","accion":"paso","red":"instagram","ok":true,"simulacion":false,
+ "motivo":null,
+ "detalle":"tocar view_id 'action_bar_left_button' · tocado 'com.instagram.android:id/action_bar_left_button' en (72,144); despues: volcado de 81234 bytes",
+ "gestos":1,
+ "volcado":{ ...la pantalla de DESPUES del toque, cruda... }}
+```
+
+### Los cuatro pasos
+
+| Paso | Payload | Que exige |
+|---|---|---|
+| `tocar` | `{"tipo":"tocar","ancla":{"view_id":"..."}}` (o `texto`, o `desc`) | Un ancla y **una sola pista**. El punto es el centro de la caja del nodo. |
+| `escribir` | `{"tipo":"escribir","texto":"hola"}` | Que haya un campo con el foco; si no, `campo_no_enfocado`. **No lleva ancla**: elegir el campo aqui seria elegir un nodo que nadie miro. |
+| `esperar` | `{"tipo":"esperar","ms":800}` | `ms` entero > 0. No entrega ningun gesto. |
+| `atras` | `{"tipo":"atras"}` | Nada. Es el boton del sistema (`GLOBAL_ACTION_BACK`). |
+
+`desplazar` no esta en este bloque: llegara cuando alguien lo necesite de verdad, y
+entonces se añade aqui **y** en `Gestos.kt` con su prueba.
+
+### El ancla: tres pistas, y ninguna se sustituye
+
+- `view_id` vale completo (`com.instagram.android:id/action_bar_left_button`) o su
+  ultima pieza (`action_bar_left_button`), que es como lo escribe una persona. El
+  sufijo de desambiguacion que pone `mano::arbol_json` (`id#3`, cuando Instagram
+  repite el mismo `view_id`) se ignora al comparar: si no, diez `image_button`
+  iguales no se verian como ambiguos y se tocaria el primero en silencio.
+- `texto` y `desc` se comparan **normalizados** (minusculas, sin tildes, espacios
+  colapsados), el mismo criterio que A1.
+- **Solo nodos visibles**: un `visible:false` no se toca, aunque el `view_id` cuadre.
+- Dos pistas en el mismo ancla es `paso_ancla_invalida`: dos anclas son dos anclas y
+  nadie ha dicho cual manda.
+
+### Los motivos con nombre
+
+| Motivo | Cuando |
+|---|---|
+| `simulacion` | La orden no traia `simulacion:false`: no se toco nada (y no se miro). |
+| `ancla_no_encontrada` | Ningun nodo VISIBLE con ese ancla. El detalle la nombra; si la mirada era parcial, lo dice en vez de afirmar la ausencia. |
+| `ancla_ambigua` | El ancla esta en 2+ nodos visibles. El detalle dice **cuantos**. No se elige uno al azar. |
+| `ancla_no_tocable` | El nodo esta pero no es `isClickable`/`isEnabled`. No se toca su padre. |
+| `ancla_sin_sitio` | El nodo esta pero su caja no ocupa sitio: no hay punto que tocar. |
+| `campo_no_enfocado` | `escribir` sin campo con el foco de entrada. |
+| `sin_mano` | Este binario no tiene arbol ni gestos (servidor), o el borde JNI no esta. |
+| `mano_sin_respuesta` | La capa Kotlin no contesta en 10 s. |
+| `observar_despues_fallo` | El paso se entrego y la mirada de despues no llego: el `detalle` dice cual fallo y el `gestos` conserva que el aparato se movio. |
+| `paso_*` | El payload del paso no vale: `paso_sin_ancla`, `paso_ancla_sobrante`, `paso_sin_texto`, `paso_espera_invalida`, `paso_ancla_invalida`, `paso_tipo_fuera_del_catalogo`, `paso_no_objeto`, `paso_sin_tipo`, `paso_campo_de_tipo_equivocado`. |
+
+### Por que `paso` NO respeta el veto como `publicar`
+
+`publicar` con `simulacion:false` contesta `ejecucion_real_no_habilitada`: no hay
+receta cableada y encadenar a ciegas publicaria en la cuenta equivocada. `paso` es
+lo contrario: **un** gesto, ya resuelto sobre una foto fresca, que no afirma nada
+sobre la red. Por eso es la unica accion con dos caminos: en simulacion contesta
+`simulacion` y no toca, y con `simulacion:false` toca. La garantia de que no se
+encadena es estructural: `atender_paso` entrega UN gesto y vuelve (un test lo
+comprueba contando `mano.gestos`).
+
+### `ok:true` aqui significa una cosa muy concreta
+
+"Se entrego el paso que se pidio y se miro despues". NO significa "se publico":
+ninguno de los cuatro pasos sabe lo que es un post. El `detalle` dice **que nodo** se
+toco y en que punto (el id y el centro de su caja), que es lo que hace falta para
+escribir la receta despues.
+
+### Verificacion del bloque (real, en este servidor)
+
+```bash
+cd modules/instagram-bridge/crate
+cargo test --offline
+# 90 pasan, 0 fallan (antes del bloque: 84)
+#   paso   6  (nuevos: tocar traduce · ancla_no_encontrada · ancla_ambigua ·
+#              simulacion no toca · observar_despues adjunta el volcado · rechazos)
+#   resto 84
+
+for f in ../tests/*.test.js; do node "$f" >/dev/null || echo "FALLO $f"; done
+# 52 suites JS OK
+```
+
+Los tests **tienen dientes** comprobado aqui, no de palabra:
+
+  - `resolver()` devolviendo el primer nodo en vez de `ancla_ambigua` ->
+    `ancla_ambigua_no_elige` **falla**;
+  - quitar el `if orden.simulacion` de `atender_paso` -> `paso_en_simulacion_no_toca`
+    **falla** (la mano recibe un gesto que nadie pidio);
+  - se restaura y vuelven a pasar.
+
+El modulo `mano::android` (que en escritorio es `cfg(target_os = "android")`)
+**compila** sin NDK: se copio el crate a un directorio de trabajo, se quitaron los
+`cfg` de `mano::android` y se dejo fuera `jni` (que necesita la caja `jni`) ->
+`cargo check --offline --all-targets` limpio, sin warnings.
+
+Lo que **no** se puede verificar en este servidor: que Kotlin compile (no hay
+`kotlinc` ni Android SDK) y que el arbol real del movil tenga el ancla que se le
+manda. Eso lo dice el primer paso de verdad: se publica la orden de arriba con
+Instagram en primer plano y se lee el `detalle` del resultado.
+
 ## Tests
 
 Un fichero por pieza, con el nombre que fija la espina `enki-plan` del plan

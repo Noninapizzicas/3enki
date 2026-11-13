@@ -45,6 +45,8 @@
 
 use crate::canal::json::{self, Valor};
 use crate::canal::mqtt::{Canal, FalloDeCanal, PublicacionRecibida};
+use crate::canal::paso::{self, FalloDePaso, GestoDePaso, Paso};
+use crate::mano::arbol_json;
 
 /// La suscripcion del aparato: todas las ordenes del bridge.
 pub const TOPIC_ORDENES: &str = "core/core-a/events/bridge/orden/#";
@@ -71,13 +73,21 @@ pub const ACCION_PUBLICAR: &str = "publicar";
 /// pantalla y no de Instagram.
 pub const ACCION_OBSERVAR: &str = "observar";
 
+/// La accion que da UN paso suelto al aparato (bloque 19d).
+///
+/// Es la unica accion del catalogo que **cambia el movil**, y por eso es la unica
+/// que pasa el veto de `simulacion` al reves: sin `simulacion:false` explicita no
+/// se toca nada. Existe para pilotar el aparato paso a paso y descubrir el flujo
+/// real de Instagram antes de escribir la receta; no es la receta.
+pub const ACCION_PASO: &str = "paso";
+
 /// El catalogo CERRADO de acciones (espejo del contrato de la skill).
 ///
-/// Hoy hay dos: `publicar` y `observar`. Añadir una accion es una decision de
-/// contrato, no un `match` mas: si estuviera abierta, una orden con
+/// Hoy hay tres: `publicar`, `observar` y `paso`. Añadir una accion es una
+/// decision de contrato, no un `match` mas: si estuviera abierta, una orden con
 /// `accion:"borrar_todo"` seria representable y alguien acabaria mapeandola a lo
 /// que hubiera a mano.
-pub const ACCIONES: &[&str] = &[ACCION_PUBLICAR, ACCION_OBSERVAR];
+pub const ACCIONES: &[&str] = &[ACCION_PUBLICAR, ACCION_OBSERVAR, ACCION_PASO];
 
 /// Las plataformas que este crate opera. Es un crate de Instagram: una orden
 /// para otra red no es "casi esto", es una orden que no se sabe hacer.
@@ -99,6 +109,13 @@ pub const MOTIVO_SIN_MANO_REAL: &str = "ejecucion_real_no_habilitada";
 /// (lo pone `mano::cola`), que es otro fallo distinto y se nombra distinto. Se
 /// compara por igualdad: sin nombre no se puede diagnosticar.
 pub const MOTIVO_SIN_MANO: &str = "sin_mano";
+
+/// El motivo de un paso que se entrego y cuya mirada de despues no llego.
+///
+/// El paso ocurrio (no se puede deshacer) y la comprobacion no: el `detalle` dice
+/// cual de las dos cosas fallo y por que. Se nombra aparte porque un `ok:true` con
+/// el volcado a `null` seria un exito sin el dato que se pidio.
+pub const MOTIVO_OBSERVAR_DESPUES: &str = "observar_despues_fallo";
 
 /// El motivo de una mano que dijo haber mirado y no trajo foto.
 ///
@@ -128,6 +145,14 @@ pub struct Orden {
     pub archivo: Option<String>,
     /// Modo seco. Ausente = `true` (ver la regla 2 de arriba).
     pub simulacion: bool,
+    /// El paso suelto, solo en `accion:"paso"` (bloque 19d). Ya validado: si
+    /// existe, se puede ejecutar tal cual.
+    pub paso: Option<Paso>,
+    /// ¿Volver a mirar despues del paso y adjuntar el volcado? Ausente = si.
+    ///
+    /// Un paso y su comprobacion viajan juntos porque separarlos invita a leer el
+    /// volcado de antes del toque creyendo que es el de despues.
+    pub observar_despues: bool,
 }
 
 impl Orden {
@@ -148,12 +173,12 @@ impl Orden {
             return Err(FalloDeOrden::AccionFueraDelCatalogo { accion });
         }
 
-        // `observar` es una LECTURA: no publica nada, asi que ni la red ni el
-        // texto significan nada en esa orden. Se aceptan ausentes (una orden
+        // `observar` es una LECTURA y `paso` no publica: en las dos, ni la red ni el
+        // texto significan nada. Se aceptan ausentes (una orden
         // `{"accion":"observar"}` es la forma natural de pedir una foto) y, si
         // vienen, se validan igual que en `publicar`: una red desconocida sigue
         // siendo un fallo, no un "da igual porque no se publica".
-        let es_lectura = accion == ACCION_OBSERVAR;
+        let es_lectura = accion == ACCION_OBSERVAR || accion == ACCION_PASO;
 
         let red = match texto_opcional(valor, "red")? {
             Some(red) => {
@@ -202,6 +227,30 @@ impl Orden {
             }
         };
 
+        // El paso suelto (19d). Ausente en cualquier otra accion: solo `paso` lo
+        // exige, y `paso` sin el no tiene nada que hacer.
+        let paso = match valor.obtener("paso") {
+            None | Some(Valor::Nulo) if accion == ACCION_PASO => {
+                return Err(FalloDeOrden::CampoAusente { campo: "paso" })
+            }
+            None | Some(Valor::Nulo) => None,
+            Some(objeto) => Some(paso::Paso::desde_valor(objeto).map_err(FalloDeOrden::Paso)?),
+        };
+
+        // Ausente = mirar despues. Presente tiene que ser booleano, por la misma
+        // razon que `simulacion`: el texto `"false"` no es `false`.
+        let observar_despues = match valor.obtener("observar_despues") {
+            None | Some(Valor::Nulo) => true,
+            Some(Valor::Bool(b)) => *b,
+            Some(otro) => {
+                return Err(FalloDeOrden::CampoDeTipoEquivocado {
+                    campo: "observar_despues",
+                    esperaba: "booleano",
+                    llego: otro.tipo(),
+                })
+            }
+        };
+
         let id = match valor.obtener("id").or_else(|| valor.obtener("orden_id")) {
             None | Some(Valor::Nulo) => String::new(),
             Some(Valor::Texto(t)) => t.clone(),
@@ -214,7 +263,7 @@ impl Orden {
             }
         };
 
-        Ok(Orden { id, accion, red, texto, archivo, simulacion })
+        Ok(Orden { id, accion, red, texto, archivo, simulacion, paso, observar_despues })
     }
 }
 
@@ -261,6 +310,9 @@ pub enum FalloDeOrden {
     CampoDeTipoEquivocado { campo: &'static str, esperaba: &'static str, llego: &'static str },
     AccionFueraDelCatalogo { accion: String },
     RedDesconocida { red: String },
+    /// El objeto `paso` no pasa su contrato (bloque 19d). Se conserva el fallo
+    /// entero en vez de un texto: su `codigo()` es el que viaja al resultado.
+    Paso(FalloDePaso),
 }
 
 impl FalloDeOrden {
@@ -273,6 +325,7 @@ impl FalloDeOrden {
             FalloDeOrden::CampoDeTipoEquivocado { .. } => "campo_de_tipo_equivocado",
             FalloDeOrden::AccionFueraDelCatalogo { .. } => "accion_fuera_del_catalogo",
             FalloDeOrden::RedDesconocida { .. } => "red_desconocida",
+            FalloDeOrden::Paso(fallo) => fallo.codigo(),
         }
     }
 
@@ -294,6 +347,7 @@ impl FalloDeOrden {
             FalloDeOrden::RedDesconocida { red } => {
                 format!("la red '{red}' no es de este crate ({})", REDES.join(", "))
             }
+            FalloDeOrden::Paso(fallo) => fallo.descripcion(),
         }
     }
 }
@@ -344,6 +398,23 @@ impl HechoDeMano {
         }
     }
 
+    /// El aparato ACEPTO el gesto (bloque 19d). `gestos` dice cuantos se
+    /// entregaron: `esperar` no entrega ninguno.
+    ///
+    /// Aceptado no es ocurrido: eso lo dice la mirada siguiente, y por eso
+    /// `publicado` sigue siendo `false` y no hay ningun camino de aqui a `ok:true`
+    /// sin la comprobacion pegada.
+    pub fn entregado(gestos: u64, detalle: impl Into<String>) -> Self {
+        Self {
+            ejecutado: true,
+            publicado: false,
+            gestos,
+            motivo: None,
+            detalle: Some(detalle.into()),
+            volcado: None,
+        }
+    }
+
     /// La mano MIRÓ y trae la foto. `ejecutado` es "se corrio la accion", no
     /// "se publico": una lectura no afirma nada sobre la red.
     pub fn con_volcado(volcado: impl Into<String>, detalle: impl Into<String>) -> Self {
@@ -380,6 +451,25 @@ pub trait ManoDeOrdenes {
         HechoDeMano::nada(
             MOTIVO_SIN_MANO,
             "esta mano no sabe mirar: no tiene arbol de accesibilidad que leer",
+        )
+    }
+
+    /// PASO (bloque 19d): entrega UN gesto ya resuelto por el crate.
+    ///
+    /// Es un verbo aparte de `ejecutar` porque no lleva una orden: el ancla ya se
+    /// resolvio sobre una foto y el gesto ya sabe donde va. La mano no busca nada
+    /// ni elige nada; obedece.
+    ///
+    /// El defecto contesta `sin_mano`: una mano que no sabe dar pasos sueltos no
+    /// finge que los dio. El interprete usa `observar()` para resolver el ancla
+    /// antes y para adjuntar el volcado despues.
+    fn ejecutar_gesto(&mut self, gesto: &GestoDePaso) -> HechoDeMano {
+        HechoDeMano::nada(
+            MOTIVO_SIN_MANO,
+            format!(
+                "esta mano no sabe ejecutar pasos sueltos ({}): no tiene arbol de accesibilidad ni gestos",
+                gesto.como_str()
+            ),
         )
     }
 }
@@ -518,11 +608,15 @@ impl std::fmt::Display for Resultado {
 // Atender UNA orden
 // ---------------------------------------------------------------------------
 
-/// Valida y atiende una orden en seco.
+/// Valida y atiende UNA orden.
 ///
 /// Es la pieza que usan el bucle y el CLI (`--orden ... --simular`), para que
 /// probar una orden a mano y recibirla del bus pasen por el MISMO codigo. Dos
 /// caminos distintos acabarian en dos validaciones distintas.
+///
+/// Las tres acciones tienen su camino, y cada uno dice lo suyo: `observar` no se
+/// veta (leer no cambia nada), `paso` se veta al reves (sin `simulacion:false`
+/// explicita no se toca el movil) y `publicar` conserva el veto del bloque 16.
 pub fn atender(payload: &str, mano: &mut dyn ManoDeOrdenes) -> Resultado {
     let orden = match Orden::desde_payload(payload) {
         Ok(orden) => orden,
@@ -542,6 +636,14 @@ pub fn atender(payload: &str, mano: &mut dyn ManoDeOrdenes) -> Resultado {
     // de verdad" para leer, que es absurdo.
     if orden.accion == ACCION_OBSERVAR {
         return atender_observar(&orden, mano);
+    }
+
+    // `paso` (19d) tiene su propio camino y su propio veto, y por eso se atiende
+    // ANTES del veto de `publicar`: aqui `simulacion:false` no es "no hay mano",
+    // es "toca de verdad". El veto no desaparece, se muda a `atender_paso`, que
+    // es el unico sitio que puede mover el aparato.
+    if orden.accion == ACCION_PASO {
+        return atender_paso(&orden, mano);
     }
 
     if !orden.simulacion {
@@ -625,6 +727,184 @@ fn atender_observar(orden: &Orden, mano: &mut dyn ManoDeOrdenes) -> Resultado {
                 detalle,
             )
         }
+    }
+}
+
+/// `paso` (19d): UN paso suelto, con su comprobacion pegada.
+///
+/// El orden de las cosas es el contrato de este bloque:
+///
+///   1. **el veto primero.** Sin `simulacion:false` explicita no se toca nada y se
+///      contesta `simulacion` (con el paso dentro). Es la unica accion que cambia
+///      el movil, asi que es donde el veto se lee con mas cuidado: ausente = no.
+///   2. **mirar antes de tocar.** El ancla se resuelve sobre una foto NUEVA. Un
+///      ancla que no se ve es `ancla_no_encontrada` (con el ancla) y no se toca
+///      nada; si esta dos veces es `ancla_ambigua` con cuantos, y **no se elige**.
+///   3. **un solo paso.** El gesto se entrega UNA vez. El paso siguiente es otra
+///      orden, con otra mirada en medio: nunca se encadena.
+///   4. **mirar despues** (`observar_despues`, ausente = si). El volcado viaja en el
+///      mismo resultado, crudo, igual que en `observar`.
+///
+/// `ok:true` aqui significa "se entrego el paso que se pidio y se miro despues".
+/// NO significa "se publico": ninguno de los cuatro pasos sabe lo que es un post,
+/// y la receta que los encadene es otro bloque.
+fn atender_paso(orden: &Orden, mano: &mut dyn ManoDeOrdenes) -> Resultado {
+    let paso = match orden.paso.as_ref() {
+        Some(paso) => paso,
+        // No puede pasar (`Orden::desde_payload` lo exige). Se contesta igual, en
+        // vez de con un `unwrap`: un panic por un payload es la peor forma de
+        // contestar una orden.
+        None => {
+            return Resultado::fallo(
+                orden.id.clone(),
+                orden.accion.clone(),
+                orden.red.clone(),
+                orden.simulacion,
+                "campo_ausente",
+                "una orden 'paso' sin 'paso' no tiene nada que hacer",
+            )
+        }
+    };
+
+    if orden.simulacion {
+        return Resultado::fallo(
+            orden.id.clone(),
+            orden.accion.clone(),
+            orden.red.clone(),
+            true,
+            MOTIVO_SIMULACION,
+            format!(
+                "el paso '{}' no se ejecuto: la orden no pidio ejecucion real (simulacion ausente o true)",
+                paso.describe()
+            ),
+        );
+    }
+
+    // El gesto lo decide el crate. Solo `tocar` necesita la foto (para resolver el
+    // ancla); los otros tres no van a ningun nodo y por eso no miran.
+    let mut etiqueta: Option<String> = None;
+    let gesto = match paso {
+        Paso::Tocar { ancla } => {
+            let HechoDeMano { ejecutado, volcado, motivo, detalle, .. } = mano.observar();
+            let volcado = match (ejecutado, volcado) {
+                (true, Some(foto)) if !foto.trim().is_empty() => foto,
+                _ => {
+                    let motivo = motivo.unwrap_or_else(|| MOTIVO_VOLCADO_AUSENTE.to_string());
+                    let detalle = detalle
+                        .unwrap_or_else(|| "la mano dijo haber mirado y no trajo foto".to_string());
+                    return Resultado::fallo(
+                        orden.id.clone(),
+                        orden.accion.clone(),
+                        orden.red.clone(),
+                        false,
+                        motivo,
+                        format!("no se pudo mirar para buscar el ancla: {detalle}"),
+                    );
+                }
+            };
+
+            // La foto se lee con el MISMO lector que usa `observar`: un segundo
+            // lector tendria un segundo comportamiento.
+            let arbol = match arbol_json::desde_json(&volcado) {
+                Ok(arbol) => arbol,
+                Err(fallo) => {
+                    return Resultado::fallo(
+                        orden.id.clone(),
+                        orden.accion.clone(),
+                        orden.red.clone(),
+                        false,
+                        fallo.codigo(),
+                        format!("la mirada no se pudo leer: {}", fallo.descripcion()),
+                    )
+                }
+            };
+
+            match paso::resolver(&arbol, ancla) {
+                Ok(hallado) => {
+                    etiqueta = hallado.nombre;
+                    GestoDePaso::Tocar { objetivo: hallado.objetivo }
+                }
+                Err(motivo) => {
+                    return Resultado::fallo(
+                        orden.id.clone(),
+                        orden.accion.clone(),
+                        orden.red.clone(),
+                        false,
+                        motivo.codigo(),
+                        motivo.descripcion(),
+                    )
+                }
+            }
+        }
+        Paso::Escribir { texto } => GestoDePaso::Escribir { texto: texto.clone() },
+        Paso::Esperar { ms } => GestoDePaso::Esperar { ms: *ms },
+        Paso::Atras => GestoDePaso::Atras,
+    };
+
+    let hecho = mano.ejecutar_gesto(&gesto);
+    if !hecho.ejecutado {
+        let motivo = hecho.motivo.clone().unwrap_or_else(|| MOTIVO_SIN_MANO.to_string());
+        let detalle = hecho.detalle.clone().unwrap_or_else(|| {
+            format!("el aparato no entrego el paso '{}'", paso.describe())
+        });
+        return Resultado::fallo(
+            orden.id.clone(),
+            orden.accion.clone(),
+            orden.red.clone(),
+            false,
+            motivo,
+            detalle,
+        );
+    }
+
+    let mut detalle = format!("{} · {}", paso.describe(), gesto.describe());
+    if let Some(etiqueta) = etiqueta.filter(|e| !e.trim().is_empty()) {
+        detalle = format!("{detalle} (nombre visible '{etiqueta}')");
+    }
+    if let Some(suyo) = hecho.detalle.as_deref().filter(|d| !d.trim().is_empty()) {
+        detalle = format!("{detalle}; {suyo}");
+    }
+
+    // 4 · la comprobacion pegada al paso.
+    let mut volcado = None;
+    if orden.observar_despues {
+        let HechoDeMano { ejecutado, volcado: foto, motivo, detalle: nota, .. } = mano.observar();
+        match (ejecutado, foto) {
+            (true, Some(foto)) if !foto.trim().is_empty() => {
+                detalle = format!("{detalle}; despues: volcado de {} bytes", foto.len());
+                volcado = Some(foto);
+            }
+            _ => {
+                // El paso YA ocurrio: no se puede deshacer. Se contesta el fallo de
+                // la comprobacion con el nombre del motivo de la mano, y el `detalle`
+                // dice que el toque si se entrego. El `gestos` del resultado conserva
+                // que el aparato se movio: un `ok:false` no puede borrar eso.
+                let motivo = motivo.unwrap_or_else(|| MOTIVO_VOLCADO_AUSENTE.to_string());
+                let nota = nota.unwrap_or_default();
+                let mut fallo = Resultado::fallo(
+                    orden.id.clone(),
+                    orden.accion.clone(),
+                    orden.red.clone(),
+                    false,
+                    MOTIVO_OBSERVAR_DESPUES,
+                    format!("{detalle}; la mirada de despues fallo ({motivo}): {nota}"),
+                );
+                fallo.gestos = hecho.gestos;
+                return fallo;
+            }
+        }
+    }
+
+    Resultado {
+        id: orden.id.clone(),
+        accion: orden.accion.clone(),
+        red: orden.red.clone(),
+        ok: true,
+        simulacion: false,
+        motivo: None,
+        detalle: Some(detalle),
+        gestos: hecho.gestos,
+        volcado,
     }
 }
 

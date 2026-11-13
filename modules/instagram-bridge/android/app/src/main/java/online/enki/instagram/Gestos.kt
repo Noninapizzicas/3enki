@@ -118,6 +118,12 @@ object Gestos {
     const val MOTIVO_DIRECCION_DESCONOCIDA = "direccion_desconocida"
     const val MOTIVO_DISTANCIA_INVALIDA = "distancia_invalida"
     const val MOTIVO_SIN_COMPONENTE = "sin_componente"
+    /** El nodo esta, pero el aparato no lo da por tocable (bloque 19d). */
+    const val MOTIVO_NO_TOCABLE = "no_tocable"
+    /** No hay ningun campo con el foco de entrada: no se escribe a ciegas. */
+    const val MOTIVO_CAMPO_NO_ENFOCADO = "campo_no_enfocado"
+    /** Un toque por coordenadas sin punto valido: (-1,-1) es tocar el borde. */
+    const val MOTIVO_PUNTO_INVALIDO = "punto_invalido"
 
     /** El servicio vivo, o null. Lo publica `Accesibilidad` al conectarse. */
     private fun servicio(): AccessibilityService? = Accesibilidad.instancia()
@@ -131,9 +137,26 @@ object Gestos {
     fun tocar(id: String, punto: Pair<Int, Int>): Entrega {
         val servicio = servicio() ?: return Entrega.Fallo(MOTIVO_SIN_SERVICIO)
 
+        // El punto se recalcula sobre el nodo VIVO: la caja que se vio puede haberse
+        // movido (un aviso, la barra de estado) y el gesto de coordenadas tiene que
+        // caer DENTRO del boton que se quiere, no donde estaba hace un segundo. El
+        // centro, igual que en el crate: `Caja.centro()`.
+        var centro = punto
+
         val nodo = buscarNodo(servicio, id)
         if (nodo != null) {
             try {
+                // Un nodo que no es clickable NO se toca: ni el, ni su padre "que
+                // seguro que recibe el toque". El padre de un boton de Instagram
+                // suele ser la barra entera, y ahi se toca lo que no era.
+                if (!nodo.isClickable) return Entrega.Fallo(MOTIVO_NO_TOCABLE)
+
+                val caja = Rect()
+                nodo.getBoundsInScreen(caja)
+                if (caja.width() > 0 && caja.height() > 0) {
+                    centro = Pair(caja.centerX(), caja.centerY())
+                }
+
                 if (nodo.isEnabled && nodo.performAction(AccessibilityNodeInfo.ACTION_CLICK)) {
                     return Entrega.Entregado("nodo")
                 }
@@ -142,7 +165,10 @@ object Gestos {
             }
         }
 
-        return gestoDeToque(servicio, punto.first, punto.second)
+        // Un toque por coordenadas sin punto es tocar (0,0), que es la esquina de la
+        // pantalla. Se nombra en vez de hacerlo.
+        if (centro.first < 0 || centro.second < 0) return Entrega.Fallo(MOTIVO_PUNTO_INVALIDO)
+        return gestoDeToque(servicio, centro.first, centro.second)
     }
 
     /**
@@ -171,6 +197,43 @@ object Gestos {
             )
             val ok = nodo.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, args)
             return if (ok) Entrega.Entregado("set_text") else Entrega.Fallo(MOTIVO_NODO_NO_EDITABLE)
+        } finally {
+            reciclar(nodo)
+        }
+    }
+
+    /**
+     * ESCRIBIR EN EL CAMPO ENFOCADO (bloque 19d).
+     *
+     * El paso `escribir` del bus NO trae id ni punto: trae el texto y nada mas. Quien
+     * sabe que campo tiene el foco es el aparato (`findFocus(FOCUS_INPUT)`), y si no
+     * hay ninguno se contesta `campo_no_enfocado` y **no se escribe nada**: teclear
+     * en el campo que resulte tener el foco es como se escribe en la bio de la
+     * cuenta o en el buscador.
+     *
+     * Es un camino aparte de `escribir(id, punto, texto)` a proposito: aquel rellena
+     * UN nodo que se vio, este rellena el que el usuario (o el paso anterior) enfoco.
+     */
+    fun escribirEnFoco(texto: String): Entrega {
+        val servicio = servicio() ?: return Entrega.Fallo(MOTIVO_SIN_SERVICIO)
+        if (texto.isEmpty()) return Entrega.Fallo(MOTIVO_TEXTO_VACIO)
+
+        val nodo = servicio.findFocus(AccessibilityNodeInfo.FOCUS_INPUT)
+            ?: return Entrega.Fallo(MOTIVO_CAMPO_NO_ENFOCADO)
+
+        try {
+            // Un campo que no es editable con el foco de entrada no es un campo de
+            // texto: se dice, no se fuerza.
+            if (!nodo.isEditable) return Entrega.Fallo(MOTIVO_CAMPO_NO_ENFOCADO)
+
+            nodo.performAction(AccessibilityNodeInfo.ACTION_FOCUS)
+            val args = Bundle()
+            args.putCharSequence(
+                AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE,
+                texto
+            )
+            val ok = nodo.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, args)
+            return if (ok) Entrega.Entregado("set_text_foco") else Entrega.Fallo(MOTIVO_CAMPO_NO_ENFOCADO)
         } finally {
             reciclar(nodo)
         }

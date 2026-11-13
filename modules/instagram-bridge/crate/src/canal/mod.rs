@@ -13,9 +13,16 @@
 //!     lo que impide leer medio CONNACK como si fuera un rechazo.
 //!   - `bucle`: el contrato de ordenes (`bridge/orden` -> la mano ->
 //!     `bridge/resultado`), la validacion contra catalogo cerrado y el par de
-//!     fallo que impide dar un envio por hecho. Dos acciones: `publicar` (mueve
-//!     el mundo, pasa por el veto de simulacion) y `observar` (bloque 19c:
-//!     lectura pura, devuelve el volcado de la ventana activa y NO se veta).
+//!     fallo que impide dar un envio por hecho. Tres acciones: `publicar` (mueve
+//!     el mundo, pasa por el veto de simulacion), `observar` (bloque 19c:
+//!     lectura pura, devuelve el volcado de la ventana activa y NO se veta) y
+//!     `paso` (bloque 19d: UN paso suelto, la unica que toca el movil de
+//!     verdad).
+//!   - `paso` (bloque 19d): el vocabulario de UN paso suelto (`tocar` por
+//!     `view_id`/`texto`/`desc`, `escribir` en el campo enfocado, `esperar`,
+//!     `atras`), su validacion, y la resolucion del ancla sobre la foto con sus
+//!     dos fallos con nombre: `ancla_no_encontrada` y `ancla_ambigua`. Rust puro:
+//!     se prueba en escritorio, sin movil.
 //!   - `json`: el lector y escritor de JSON minimo, porque una orden es JSON y
 //!     buscarla con subcadenas es la clase de atajo que ejecuta lo que no era.
 //!   - `observacion` (bloque 19b): el volcado de pantalla del aparato camino del
@@ -36,9 +43,11 @@ pub mod bucle;
 pub mod json;
 pub mod mqtt;
 pub mod observacion;
+pub mod paso;
 
 pub use bucle::{
     atender, servir, Bus, HechoDeMano, ManoAusente, ManoDeOrdenes, Opcion, Orden, Resultado,
-    ACCIONES, ACCION_OBSERVAR, ACCION_PUBLICAR,
+    ACCIONES, ACCION_OBSERVAR, ACCION_PASO, ACCION_PUBLICAR,
 };
+pub use paso::{AnclaDePaso, GestoDePaso, Paso};
 pub use mqtt::{url_con_llave, Canal, FalloDeCanal, Framer};

@@ -52,6 +52,7 @@ use std::time::Duration;
 
 use crate::canal::bucle::{HechoDeMano, ManoDeOrdenes, Orden};
 use crate::canal::json::{self, Valor};
+use crate::canal::paso::{self, GestoDePaso};
 use crate::mano::arbol_json::{self, FalloDeArbol};
 use crate::mano::cola::{ColaDeMano, EsperaAgotada, TipoDePeticion, PLAZO_DE_RESPUESTA};
 use crate::mano::ejecutor::{Direccion, FalloDeGesto, Gesto, Objetivo, Superficie};
@@ -221,6 +222,34 @@ impl ManoAndroid {
         desenlace(&respuesta)
     }
 
+    /// ESCRIBIR EN EL CAMPO ENFOCADO (bloque 19d).
+    ///
+    /// Sin id y sin punto a proposito: el paso `escribir` del bus solo trae el
+    /// texto, y quien sabe que campo tiene el foco es el aparato
+    /// (`AccessibilityService.findFocus`). Si no hay ninguno, `Gestos.kt` contesta
+    /// `campo_no_enfocado` y **no escribe nada**: teclear en el campo que resulte
+    /// tener el foco es como se escribe en la bio de la cuenta.
+    fn escribir_en_foco(&self, texto: &str) -> Result<(), FalloDeGesto> {
+        let datos = paso::json_del_gesto(&GestoDePaso::Escribir { texto: texto.to_string() });
+        let respuesta = self
+            .pedir(TipoDePeticion::Ejecutar, datos, PLAZO_DE_RESPUESTA)
+            .map_err(|fallo| FalloDeGesto::nuevo(fallo.motivo()))?;
+        paso::desenlace(&respuesta).map_err(FalloDeGesto::nuevo)
+    }
+
+    /// ATRAS: el boton del sistema (bloque 19d).
+    ///
+    /// No es una accion del catalogo de recetas (`Superficie` tiene las cuatro de
+    /// A3 y `volver` es la salida de la escalera, no un paso): aqui es un paso
+    /// suelto mas, el que hace falta para pilotar el movil a mano.
+    fn atras(&self) -> Result<(), FalloDeGesto> {
+        let datos = paso::json_del_gesto(&GestoDePaso::Atras);
+        let respuesta = self
+            .pedir(TipoDePeticion::Ejecutar, datos, PLAZO_DE_RESPUESTA)
+            .map_err(|fallo| FalloDeGesto::nuevo(fallo.motivo()))?;
+        paso::desenlace(&respuesta).map_err(FalloDeGesto::nuevo)
+    }
+
     /// Encola y espera, con el plazo ya decidido.
     fn pedir(&self, tipo: TipoDePeticion, datos: String, plazo: Duration) -> Result<String, FalloDeMano> {
         let peticion = self.cola.pedir(tipo, datos, plazo);
@@ -357,6 +386,47 @@ impl ManoDeOrdenes for ManoAndroid {
                 )
             }
             Err(fallo) => HechoDeMano::nada(fallo.motivo(), fallo.descripcion()),
+        }
+    }
+
+    /// PASO (bloque 19d): entrega UN gesto ya resuelto por el crate.
+    ///
+    /// # Quien decide que se toca
+    ///
+    /// El crate, y solo el crate. El ancla (`view_id`, `texto` o `desc`) se
+    /// resuelve con `canal::paso::resolver` sobre la foto que devuelve
+    /// `observar()` —la unica foto fresca que existe, porque el aparato es el
+    /// unico que puede mirar—, y de ahi sale un `Objetivo` con el **id del nodo**
+    /// (para que `Gestos.tocar` lo reencuentre vivo y use `ACTION_CLICK`) y el
+    /// **centro de su caja** (para el `GestureDescription` cuando el nodo ya no
+    /// este). Aqui no se busca nada: el dia que la mano eligiera un nodo, habria
+    /// dos politicas y la del aparato ganaria por estar mas cerca.
+    ///
+    /// # Que devuelve
+    ///
+    /// El nodo tocado, con nombre y punto, en el `detalle`: un `ok` sin decir QUE
+    /// se toco no sirve para grabar una receta. `gestos` cuenta solo lo que pudo
+    /// cambiar el mundo: `esperar` no entrega ninguno.
+    fn ejecutar_gesto(&mut self, gesto: &GestoDePaso) -> HechoDeMano {
+        let entrega = match gesto {
+            GestoDePaso::Tocar { objetivo } => Superficie::tocar(self, objetivo),
+            GestoDePaso::Escribir { texto } => self.escribir_en_foco(texto),
+            GestoDePaso::Esperar { ms } => Superficie::esperar(self, *ms),
+            GestoDePaso::Atras => self.atras(),
+        };
+
+        let gestos = if matches!(gesto, GestoDePaso::Esperar { .. }) { 0 } else { 1 };
+
+        match entrega {
+            Ok(()) => HechoDeMano::entregado(
+                gestos,
+                format!("{}: el aparato acepto el gesto", gesto.describe()),
+            ),
+            Err(fallo) => {
+                let motivo = fallo.motivo;
+                let detalle = format!("el aparato no entrego el paso '{}': {motivo}", gesto.como_str());
+                HechoDeMano::nada(motivo, detalle)
+            }
         }
     }
 }

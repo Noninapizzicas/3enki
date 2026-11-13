@@ -261,8 +261,14 @@ object BucleDeMano {
 
         val entrega = when (val accion = paso.optString("accion", "")) {
             "tocar" -> Gestos.tocar(paso.optString("id", ""), punto(paso))
-            "escribir" ->
-                Gestos.escribir(paso.optString("id", ""), punto(paso), paso.optString("texto", ""))
+            // Sin `id` el paso significa "en el campo ENFOCADO" (bloque 19d): el
+            // texto lo decide el crate, el campo lo decide el foco. Con `id` es el
+            // camino de la receta (un nodo que se vio), que no ha cambiado.
+            "escribir" -> {
+                val id = paso.optString("id", "")
+                if (id.isEmpty()) Gestos.escribirEnFoco(paso.optString("texto", ""))
+                else Gestos.escribir(id, punto(paso), paso.optString("texto", ""))
+            }
             "desplazar" ->
                 Gestos.desplazar(
                     paso.optString("direccion", ""),
@@ -276,6 +282,10 @@ object BucleDeMano {
                 val ms = paso.optLong("ms", -1L)
                 if (ms <= 0L) Entrega.Fallo(MOTIVO_ESPERA_INVALIDA) else Gestos.esperar(ms)
             }
+            // ATRAS (bloque 19d): el boton del sistema. No es una accion de receta
+            // (A5 la usa para `volver`); aqui es un paso suelto mas, el que hace
+            // falta para pilotar el movil a mano.
+            "atras" -> Gestos.atras()
             else -> return fallo("$MOTIVO_ACCION_DESCONOCIDA: $accion")
         }
 

@@ -19,12 +19,14 @@
      compone un lienzo vertical de 1080x1920 y se le da un cuarto de vuelta
      exacto: girado, su caja mide 1920x1080 y llena el panel sin escalar y sin
      recortar. El signo de abajo dice hacia dónde: rotamos la IMAGEN a la
-     derecha (90deg), o sea que la tele se cuelga girándola hacia la IZQUIERDA
-     (su borde derecho arriba). Si se cuelga al revés se ve del derecho
-     cambiando 90deg por -90deg — una línea. */
+     izquierda (-90deg), o sea que la tele se cuelga girándola hacia la
+     DERECHA (su borde izquierdo arriba). Medido el 13-nov-2026 en el soporte
+     del local: con 90deg la pantalla salía boca abajo; el signo entregado es
+     -90deg. Si se colgara al revés, se ve del derecho cambiando -90deg por
+     90deg — una línea. */
   html,body{width:1920px;height:1080px;overflow:hidden;background:#000;color:var(--texto);font-family:var(--sans)}
   #lienzo{position:fixed;top:50%;left:50%;width:1080px;height:1920px;
-    transform:translate(-50%,-50%) rotate(90deg);transform-origin:center center;
+    transform:translate(-50%,-50%) rotate(-90deg);transform-origin:center center;
     display:flex;flex-direction:column;background:var(--fondo)}
 
   /* ── A · cabecera (fija) — marca, abierto, hora */

@@ -9,6 +9,15 @@ const MAX_CLAVES_IDEMPOTENCIA = 100;
 // Telegram corta a 4096 caracteres por mensaje; se deja margen.
 const MAX_LARGO_TELEGRAM = 4000;
 
+// ── BLINDAJE DEL BOT DE CIERRES (decisión del dueño, 13-nov-2026) ─────────────
+// Los cierres de The Pirate salen SIEMPRE por Cierres_thepirate_bot. No es config:
+// es invariante del módulo. Ni el telegram-bridge (ese proyecto tiene DOS bots
+// vinculados y "el primero que encaje" es indeterminado), ni `bots_por_proyecto`
+// (inerte: el loader solo inyecta el `config` del module.json), ni `bot_name`
+// pueden moverlo. Cambiarlo exige editar este fichero a propósito.
+const BOT_CIERRES_THE_PIRATE = 'Cierres_thepirate_bot';
+const PROYECTOS_THE_PIRATE = new Set(['the-pirate', '5d09cb49-35a0-409f-9e09-c57da93b84a8']);
+
 const ETIQUETAS_METODO = {
   efectivo: 'Efectivo',
   tarjeta: 'Tarjeta',
@@ -246,12 +255,20 @@ class ReporteCierreModule extends BaseModule {
   //   2. vinculo del telegram-bridge para `project_id`
   //   3. `bots_por_proyecto` de la config (mapa declarado a mano por el dueño)
   //   4. `bot_name` de config (ultimo recurso: nunca se queda sin reporte)
+  // y SIEMPRE pasa despues por `_blindarBot`: para The Pirate el resultado es
+  // Cierres_thepirate_bot, venga lo que venga de los cuatro escalones.
   //
   // `alt` es una segunda llave del MISMO negocio (p.ej. `cierre.project_id_origen`,
   // el slug del fichero de ventas rescatado): el bus usa UUID y slug de forma
   // indistinta y el mapa puede estar escrito con cualquiera de los dos.
   async _botDelProyecto(project_id, alt = null) {
-    const deConfig = this.config.bot_name || 'Pro_nonina_bot';
+    const resuelto = await this._resolverBot(project_id, alt);
+    return this._blindarBot(project_id, alt, resuelto);
+  }
+
+  /** Resolucion normal por proyecto. El blindaje NO se aplica aqui: eso es `_blindarBot`. */
+  async _resolverBot(project_id, alt = null) {
+    const deConfig = this.config.bot_name || BOT_CIERRES_THE_PIRATE;
     // La llave puede llegar solo por `alt` (cierre sin project_id, rescatado del disco).
     const llave = project_id || alt || null;
     if (!llave || this.config.bot_por_proyecto === false) return deConfig;
@@ -272,6 +289,26 @@ class ReporteCierreModule extends BaseModule {
     const delMapa = this._botDelMapa(llave) || this._botDelMapa(alt);
     if (delMapa) return delMapa;
     return deConfig;
+  }
+
+  /**
+   * BLINDAJE — el cierre de The Pirate sale por Cierres_thepirate_bot, diga lo que
+   * diga la config, el bridge o el mapa. Si algo distinto intento ganar, se declara
+   * en `reporte-cierre.bot_forzado` (visibilidad, no silencio). Se compara contra el
+   * slug Y el UUID reales del proyecto, en minusculas y sin espacios.
+   */
+  _blindarBot(project_id, alt, botResuelto) {
+    const norm = (v) => String(v === undefined || v === null ? '' : v).trim().toLowerCase();
+    const esPirata = [project_id, alt].some((k) => k && PROYECTOS_THE_PIRATE.has(norm(k)));
+    if (!esPirata) return botResuelto;
+    if (botResuelto !== BOT_CIERRES_THE_PIRATE) {
+      this.logger.warn('reporte-cierre.bot_forzado', {
+        bot_resuelto: botResuelto,
+        bot_forzado: BOT_CIERRES_THE_PIRATE,
+        project_id: project_id || null
+      });
+    }
+    return BOT_CIERRES_THE_PIRATE;
   }
 
   /**

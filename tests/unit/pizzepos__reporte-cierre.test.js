@@ -382,6 +382,42 @@ test('(i) sin arqueo ni desglose → el efectivo solo muestra el importe cobrado
 });
 
 // ==========================================
+// (k) BLINDAJE: el cierre de The Pirate sale SIEMPRE por Cierres_thepirate_bot
+// ==========================================
+test('(k) The Pirate manda por Cierres_thepirate_bot aunque la config/bridge digan otro', async () => {
+  // Config HOSTIL a proposito: bot_name de otro bot, reparto encendido y el mapa
+  // apuntando al bot general. Nada de eso debe mover el cierre de The Pirate.
+  const { mod, bus, logger } = await cargar({
+    bot_name: 'The_pirate_enki_bot',
+    chat_id: '1934798567',
+    telegram_activo: true,
+    bot_por_proyecto: true,
+    bots_por_proyecto: { 'the-pirate': 'The_pirate_enki_bot' }
+  });
+  // Y el bridge devuelve los DOS bots vinculados (el caso real: el general y el de cierres).
+  mod._rpc = async () => ({ data: { vinculos: [
+    { botName: 'The_pirate_enki_bot', project_id: '5d09cb49-35a0-409f-9e09-c57da93b84a8' },
+    { botName: 'Cierres_thepirate_bot', project_id: '5d09cb49-35a0-409f-9e09-c57da93b84a8' }
+  ] } });
+
+  // Las dos llaves del mismo negocio: slug y UUID.
+  await mod.onCajaCerrada(eventoCierre({ project_id: 'the-pirate', fecha: '2026-11-11' }));
+  await mod.onCajaCerrada(eventoCierre({ project_id: '5d09cb49-35a0-409f-9e09-c57da93b84a8', fecha: '2026-11-12' }));
+
+  const enviados = bus.de('telegram.send_message.request').map((x) => x.payload.botName);
+  assert.deepStrictEqual(enviados, ['Cierres_thepirate_bot', 'Cierres_thepirate_bot'],
+    'el cierre de The Pirate no sale por ningun otro bot');
+
+  // Y queda constancia cuando algo intento moverlo (visibilidad, no silencio).
+  const forzados = logger.logs.filter((l) => l.evento === 'reporte-cierre.bot_forzado');
+  assert.ok(forzados.length >= 1, 'el blindaje se declara en el log');
+  assert.strictEqual(forzados[0].datos.bot_forzado, 'Cierres_thepirate_bot');
+
+  // El destino sigue siendo el privado del dueño.
+  assert.strictEqual(bus.de('telegram.send_message.request')[0].payload.chatId, 1934798567);
+});
+
+// ==========================================
 // Ejecución
 // ==========================================
 

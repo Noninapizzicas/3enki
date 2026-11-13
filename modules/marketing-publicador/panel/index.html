@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="proyecto" content="__PROYECTO__">
+<title>Publicador</title>
+<link rel="stylesheet" href="estilo.css">
+</head>
+<body>
+
+<header class="cabecera">
+  <div class="marca">
+    <span class="punto"></span>
+    <h1>Publicador</h1>
+    <span class="proyecto" id="proyecto">—</span>
+  </div>
+  <div class="acciones">
+    <span class="cuenta" id="cuenta">—</span>
+    <button class="boton plano" id="refrescar" type="button">Refrescar material</button>
+  </div>
+</header>
+
+<main class="mesa">
+
+  <!-- ── El material: TODO, sin filtro de formato ni de tamano ───────────── -->
+  <section class="panel material">
+    <div class="panel-cabeza">
+      <h2>Material</h2>
+      <span class="pista" id="pista-material">cargando…</span>
+    </div>
+    <div class="rejilla" id="rejilla" aria-live="polite"></div>
+    <p class="vacio" id="vacio" hidden></p>
+  </section>
+
+  <!-- ── El texto y el destino ────────────────────────────────────────────── -->
+  <section class="panel compositor">
+    <div class="panel-cabeza">
+      <h2>Publicar</h2>
+      <span class="pista" id="elegido">ningún fichero elegido</span>
+    </div>
+
+    <label class="etiqueta" for="texto">Texto</label>
+    <textarea id="texto" rows="6" placeholder="Lo que va escrito en la publicación…"></textarea>
+    <p class="nota">El aparato exige texto en «publicación»; sin texto contesta <code>campo_vacio</code> y aquí se verá tal cual.</p>
+
+    <span class="etiqueta">Destino</span>
+    <div class="destinos" id="destinos" role="radiogroup" aria-label="Destino">
+      <button class="destino" type="button" role="radio" aria-checked="false" data-destino="historia">Historia</button>
+      <button class="destino" type="button" role="radio" aria-checked="false" data-destino="publicacion">Publicación</button>
+      <button class="destino" type="button" role="radio" aria-checked="false" data-destino="reels">Reels</button>
+    </div>
+
+    <button class="boton publicar" id="publicar" type="button" disabled>Publicar</button>
+
+    <!-- ── El estado, en vivo ─────────────────────────────────────────────── -->
+    <div class="estado" id="estado" hidden>
+      <div class="estado-fila">
+        <span class="chip" id="chip">enviado</span>
+        <span class="estado-id" id="estado-id"></span>
+      </div>
+      <p class="estado-detalle" id="estado-detalle"></p>
+      <pre class="estado-motivo" id="estado-motivo" hidden></pre>
+      <p class="estado-pie" id="estado-pie"></p>
+    </div>
+
+    <p class="fallo" id="fallo" hidden></p>
+  </section>
+
+</main>
+
+<script src="app.js"></script>
+</body>
+</html>

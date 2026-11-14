@@ -1,4 +1,4 @@
-#Requires -Version 5.1
+﻿#Requires -Version 5.1
 <#
   setup-pc.ps1 — Instala el thin bridge GRBL en un PC Windows.
 
@@ -760,14 +760,29 @@ Write-Utf8 (Join-Path $dir 'start.bat') $startBat
 Write-Host ''
 Write-Host '  Instalando mqtt (npm)...'
 Push-Location $dir
+# npm escribe 'npm notice' en STDERR. Con $ErrorActionPreference='Stop' PowerShell
+# 5.1 lo convierte en NativeCommandError y aborta el script entero (pasó en el
+# primer intento real en Windows). Aqui se relaja SOLO alrededor de npm y se
+# decide por $LASTEXITCODE, que es el codigo de salida de verdad.
+$eapPrevio = $ErrorActionPreference
+$ErrorActionPreference = 'Continue'
 try {
-    & npm install --omit=dev --no-audit --no-fund 2>&1 | Out-Null
-    if ($LASTEXITCODE -ne 0) {
-        Write-Host '  ERROR: npm install fallo.' -ForegroundColor Red
-        exit 1
-    }
+    & npm install --omit=dev --no-audit --no-fund --loglevel=error 2>&1 | Out-Null
+    $npmExit = $LASTEXITCODE
 } finally {
+    $ErrorActionPreference = $eapPrevio
     Pop-Location
+}
+if ($npmExit -ne 0) {
+    Write-Host "  ERROR: npm install fallo (codigo $npmExit)." -ForegroundColor Red
+    Write-Host "  Prueba a mano:" -ForegroundColor Yellow
+    Write-Host "    cd `"$dir`""
+    Write-Host "    npm install --omit=dev"
+    exit 1
+}
+if (-not (Test-Path (Join-Path $dir 'node_modules\mqtt'))) {
+    Write-Host '  ERROR: npm termino pero no hay node_modules\mqtt.' -ForegroundColor Red
+    exit 1
 }
 Write-Host '  mqtt instalado.'
 

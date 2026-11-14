@@ -23,8 +23,21 @@
      DERECHA (su borde izquierdo arriba). Medido el 13-nov-2026 en el soporte
      del local: con 90deg la pantalla salía boca abajo; el signo entregado es
      -90deg. Si se colgara al revés, se ve del derecho cambiando -90deg por
-     90deg — una línea. */
-  html,body{width:1920px;height:1080px;overflow:hidden;background:#000;color:var(--texto);font-family:var(--sans)}
+     90deg — una línea.
+
+     ── Y EL ENCAJE: el panel puede medir MENOS que la caja girada ───────────
+     La caja girada mide 1920x1080 CSS, pero la ventana del navegador de la tele
+     no siempre mide eso: la barra del navegador, el zoom guardado por sitio, el
+     device-pixel-ratio y el overscan del panel la dejan por debajo. Con el
+     lienzo a tamaño fijo, cada píxel que falta se come un borde del lienzo: en
+     el soporte del local (14-nov-2026) la cabecera y la cinta desaparecían por
+     el borde y los títulos salían cortados por la izquierda («izza de atún»).
+     Por eso el lienzo se ENCAJA a la ventana real: se mide con `--k` (más
+     abajo, `encajar()`) y se escala lo justo para que entre entero, uniforme y
+     sin recortar. Si la ventana mide exactamente 1920x1080, `--k` vale 1 y no
+     cambia ni un píxel. El fondo del body es `--fondo`, el mismo del lienzo,
+     para que la banda que deje el encaje no se lea como un marco negro. */
+  html,body{width:100%;height:100%;overflow:hidden;background:var(--fondo);color:var(--texto);font-family:var(--sans)}
   /* ── LATIDO: vídeo mudo en bucle, invisible. NO es decoración ──────────────
      webOS da la pantalla por dormida cuando no hay reproducción de medios, y
      entonces saca su reloj y acaba apagando. Mientras un <video> está
@@ -40,7 +53,8 @@
     pointer-events:none;z-index:0;background:#000}
 
   #lienzo{position:fixed;top:50%;left:50%;width:1080px;height:1920px;
-    transform:translate(-50%,-50%) rotate(-90deg);transform-origin:center center;
+    transform:translate(-50%,-50%) rotate(-90deg) scale(var(--k,1));
+    transform-origin:center center;
     display:flex;flex-direction:column;background:var(--fondo)}
 
   /* ── A · cabecera (fija) — marca, abierto, hora */
@@ -186,6 +200,27 @@ const CLAVE_ULTIMO = 'pantalla-tv/ultimo-bueno';
 const SEG_POR_PIEZA = 12;
 
 let datos = null;
+
+/* ── ENCAJE: el lienzo se mide contra la ventana REAL, no contra 1920x1080 ──
+   La caja girada mide 1920x1080 CSS. Si la ventana del navegador mide menos
+   (barra de direcciones, zoom guardado, device-pixel-ratio, overscan del panel),
+   el lienzo sobra por los cuatro lados y se come la cabecera y los bordes del
+   texto. Aquí se mide lo que hay de verdad y se escala el conjunto lo justo
+   para que entre entero: escala uniforme (`min` de las dos), centrada, sin
+   deformar y sin recortar. Con la ventana a 1920x1080 el factor vale 1 y el
+   render es idéntico al de siempre.
+   Se recalcula al redimensionar y en dos latidos tardíos, porque la barra del
+   navegador aparece/desaparece después del load y cambia el alto disponible. */
+function encajar(){
+  const w = document.documentElement.clientWidth  || window.innerWidth  || 1920;
+  const h = document.documentElement.clientHeight || window.innerHeight || 1080;
+  const k = Math.min(w / 1920, h / 1080);
+  document.documentElement.style.setProperty('--k', String(Math.max(0.2, Math.min(4, k))));
+}
+encajar();
+addEventListener('resize', encajar);
+addEventListener('orientationchange', encajar);
+setTimeout(encajar, 400); setTimeout(encajar, 1500);
 
 function esc(s){ return String(s == null ? '' : s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
 

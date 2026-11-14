@@ -756,6 +756,16 @@ Write-Host '  Ficheros escritos: index.js, grbl-client.js, package.json, config.
 $startBat = "@echo off`r`ncd /d `"%~dp0`"`r`nnode index.js`r`npause`r`n"
 Write-Utf8 (Join-Path $dir 'start.bat') $startBat
 
+# Arranque sin ventana (lo usa el acceso de Inicio cuando no hay permisos
+# para el programador de tareas)
+$startVbs = @'
+Set fso = CreateObject("Scripting.FileSystemObject")
+Set sh  = CreateObject("WScript.Shell")
+sh.CurrentDirectory = fso.GetParentFolderName(WScript.ScriptFullName)
+sh.Run "node index.js", 0, False
+'@
+Write-Utf8 (Join-Path $dir 'start-oculto.vbs') $startVbs
+
 # ── 4. Dependencias ───────────────────────────────────────────────────────
 Write-Host ''
 Write-Host '  Instalando mqtt (npm)...'
@@ -827,13 +837,34 @@ try {
     $taskOk = $true
     Write-Host "  Tarea programada '$taskName' creada (arranca al iniciar sesion)."
 } catch {
-    Write-Host "  AVISO: no se pudo crear la tarea '$taskName': $($_.Exception.Message)" -ForegroundColor Yellow
-    Write-Host "  Arrancalo a mano con: $dir\start.bat" -ForegroundColor Yellow
+    # Sin permisos de administrador Register-ScheduledTask falla con "Acceso
+    # denegado" (pasó en el primer intento real). No hace falta elevacion: un
+    # acceso directo en la carpeta de Inicio del USUARIO arranca al iniciar
+    # sesion igual de bien y sin tocar el programador de tareas.
+    Write-Host "  Aviso: sin permisos para la tarea programada. Usando Inicio del usuario." -ForegroundColor Yellow
+    try {
+        $startup = [Environment]::GetFolderPath('Startup')
+        $ws = New-Object -ComObject WScript.Shell
+        $lnk = $ws.CreateShortcut((Join-Path $startup 'EnkiBridgeGRBL.lnk'))
+        $lnk.TargetPath = (Join-Path $dir 'start-oculto.vbs')
+        $lnk.WorkingDirectory = $dir
+        $lnk.Description = 'Bridge GRBL Enki (Atomstack A20 Pro V2)'
+        $lnk.Save()
+        $taskOk = $false
+        $usarInicio = $true
+        Write-Host "  Arranque automatico via Inicio: $(Join-Path $startup 'EnkiBridgeGRBL.lnk')" -ForegroundColor Green
+    } catch {
+        Write-Host "  Aviso: tampoco se pudo crear el acceso de Inicio: $($_.Exception.Message)" -ForegroundColor Yellow
+        Write-Host "  Arrancalo a mano con: $dir\start.bat" -ForegroundColor Yellow
+    }
 }
 
 # ── 7. Arrancar ahora ─────────────────────────────────────────────────────
 if ($taskOk) {
     Start-ScheduledTask -TaskName $taskName -ErrorAction SilentlyContinue
+    Start-Sleep -Seconds 3
+} elseif ($usarInicio) {
+    Start-Process -FilePath 'wscript.exe' -ArgumentList "`"$(Join-Path $dir 'start-oculto.vbs')`""
     Start-Sleep -Seconds 3
 } else {
     Start-Process -FilePath 'node' -ArgumentList "`"$(Join-Path $dir 'index.js')`"" -WorkingDirectory $dir -WindowStyle Hidden

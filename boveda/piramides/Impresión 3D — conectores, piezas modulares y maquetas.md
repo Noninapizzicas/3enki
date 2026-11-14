@@ -45,8 +45,9 @@ CONECTOR DE PUNTO MEDIO DE BASE (opcional, solo en bases grandes, >1,5 m) — re
 
 ALOJAMIENTO (el "agujero" donde entra el tubo) — diámetro interior del alojamiento =
   diámetro exterior real del tubo/varilla + holgura de tolerancia (ver abajo), NUNCA el
-  diámetro nominal comercial (p. ej. un tubo de cobre "15 mm" mide realmente ≈15,87 mm de
-  diámetro exterior — mide siempre con un calibre antes de diseñar)
+  diámetro nominal comercial (p. ej. el tubo de fontanería "15 mm" mide 15,0 mm de exterior,
+  pero el de climatización 5/8" mide 15,87 mm — son tubos distintos; mide siempre con un
+  calibre antes de diseñar)
 ```
 
 ---
@@ -127,8 +128,9 @@ CRITERIO DE ELECCIÓN: si tu tubo es un diámetro "raro" (cobre comercial españ
 ## Errores comunes
 
 ```
-1. DISEÑAR EL ALOJAMIENTO CON EL DIÁMETRO NOMINAL EN VEZ DEL REAL — "tubo de 15 mm" casi
-   nunca mide exactamente 15,00 mm; mide siempre con calibre antes de fijar la tolerancia.
+1. DISEÑAR EL ALOJAMIENTO CON EL DIÁMETRO NOMINAL EN VEZ DEL REAL — el nombre comercial
+   engaña (15 mm fontanería = Ø15,0; 5/8" climatización = Ø15,87) y cada fabricante tiene
+   su tolerancia; mide siempre con calibre antes de fijar la holgura.
 2. NO IMPRIMIR UNA PIEZA DE PRUEBA — lanzar 8 conectores de golpe sin validar uno primero es
    la forma más cara de descubrir que la tolerancia estaba mal calculada.
 3. OLVIDAR LOS SOPORTES EN EL CONECTOR DE ESQUINA DE BASE — el alojamiento inclinado a 41,99°

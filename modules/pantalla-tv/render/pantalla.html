@@ -39,8 +39,17 @@
   #latido{position:fixed;right:0;bottom:0;width:2px;height:2px;opacity:.01;
     pointer-events:none;z-index:0;background:#000}
 
+  /* ── ENCAJE: el lienzo se encoge lo justo para caber en la ventana ────────
+     El navegador de la tele NO entrega 1920x1080: entrega 1536x864 (zoom del
+     125%), y como el lienzo está clavado a 1920x1080 y no se escalaba, se
+     salía por los cuatro bordes — desaparecía la cabecera entera, «Pizza de
+     atún» perdía la P y el precio el primer dígito. Medido el 14-nov-2026
+     sobre la foto del local: reproducido a 1536x864 el recorte sale idéntico.
+     La escala la pone el JS de abajo: 1536/1920 = 864/1080 = 0.8, que es el
+     mismo encuadre al 100% del panel y sin bandas negras; si la ventana fuese
+     1920x1080 la escala vale 1 y no cambia nada. */
   #lienzo{position:fixed;top:50%;left:50%;width:1080px;height:1920px;
-    transform:translate(-50%,-50%) rotate(-90deg);transform-origin:center center;
+    transform:translate(-50%,-50%) scale(var(--esc,1)) rotate(-90deg);transform-origin:center center;
     display:flex;flex-direction:column;background:var(--fondo)}
 
   /* ── A · cabecera (fija) — marca, abierto, hora */
@@ -174,6 +183,26 @@
 </div>
 
 <script>
+/* ── ENCAJE AL HUECO REAL DE LA VENTANA ────────────────────────────────────
+   Girado, el lienzo ocupa 1920x1080. Esa es la medida que hay que encajar en
+   la ventana que el navegador declara — y el de la tele declara 1536x864, no
+   1920x1080. La escala es el menor de los dos ajustes (nunca por encima de 1,
+   para no ampliar ni emborronar): con 1536x864 da 0.8 exacto, que llena el
+   panel igual que antes pero sin perder un solo borde. Si algún día la ventana
+   fuese 1920x1080, da 1 y la pantalla queda clavada como hasta ahora.
+   Si el aparato declarase la ventana en vertical (panel rotado por el SO), se
+   deja en 1: ese caso no es este montaje y encogerlo sería peor. */
+(function encajar(){
+  const ANCHO = 1920, ALTO = 1080;
+  function pon(){
+    const vw = window.innerWidth || ANCHO, vh = window.innerHeight || ALTO;
+    const s = (vw >= vh) ? Math.min(vw / ANCHO, vh / ALTO, 1) : 1;
+    document.documentElement.style.setProperty('--esc', s.toFixed(4));
+  }
+  pon();
+  window.addEventListener('resize', pon);
+  window.addEventListener('orientationchange', pon);
+})();
 'use strict';
 
 /* ─────────────────────────────────────────────────────────────────────────

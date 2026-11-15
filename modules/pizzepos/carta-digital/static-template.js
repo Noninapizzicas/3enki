@@ -54,7 +54,15 @@ function generateStaticHTML(carta, config, options = {}) {
     // (publicar → /shop/<slug>) no se setea → chat OFF por diseño (autoservicio puro).
     ai_endpoint = config.ai_endpoint || '',
     ai_provider = config.ai_provider || 'auto',
-    ai_chat_path = config.ai_chat_path || '/chat',
+    // SIN CHAT NO HAY RUTA DE CHAT. Antes se emitía siempre '/chat' aunque el
+    // chat estuviera apagado (ai_endpoint vacío). Esa URL apunta a una ruta que
+    // la puerta de Caddy NO deja pública: si algo la pide —un botón legacy, un
+    // service worker con el bundle viejo en caché— responde 401 con
+    // WWW-Authenticate y el navegador abre el diálogo de contraseña ENCIMA de
+    // una página que es pública. Un dato inerte no debe apuntar a una puerta.
+    ai_chat_path = (config.chat_enabled !== false && !!config.ai_endpoint)
+      ? (config.ai_chat_path || '/chat')
+      : '',
     chat_enabled = config.chat_enabled !== false && !!ai_endpoint,
     // Endpoint de pedido online (tienda-api). Si está → la PWA hace POST (escenario
     // ALOJADO: VPS+dominio). Si NO → checkout por WhatsApp (escenario PWA suelta).
@@ -2478,7 +2486,15 @@ function sendMessage(text) {
     aiMsgs.push({ role: history[i].role, content: history[i].content });
   }
 
-  var endpoint = CONFIG.ai_endpoint + (CONFIG.ai_chat_path || '/chat');   // cerebro = cf-worker (suelto)
+  // Sin endpoint configurado NO se hace ninguna petición: el fallback '/' disparaba
+  // un POST contra la propia página, y cualquier ruta privada devuelve 401 (diálogo
+  // de contraseña sobre una página pública). Si no hay chat, no hay llamada.
+  var endpoint = CONFIG.ai_endpoint + CONFIG.ai_chat_path;   // cerebro = cf-worker (suelto)
+  if (!endpoint) {
+    document.getElementById('chat-send').disabled = false;
+    setStatus('');
+    return;
+  }
 
   fetch(endpoint, {
     method: 'POST',

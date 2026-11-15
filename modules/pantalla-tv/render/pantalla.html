@@ -38,24 +38,23 @@
      cambia ni un píxel. El fondo del body es `--fondo`, el mismo del lienzo,
      para que la banda que deje el encaje no se lea como un marco negro. */
   html,body{width:100%;height:100%;overflow:hidden;background:var(--fondo);color:var(--texto);font-family:var(--sans)}
-  /* ── LATIDO: vídeo mudo en bucle, invisible. NO es decoración ──────────────
-     webOS da la pantalla por dormida cuando no hay reproducción de medios, y
-     entonces saca su reloj y acaba apagando. Mientras un <video> está
-     reproduciendo, el sistema entiende que hay actividad. Tiene que medir >0 y
-     estar en el viewport: display:none o una caja 0x0 NO cuentan, porque el
-     navegador deja de decodificar. 2x2 px con opacidad casi nula: invisible al
-     ojo, vivo para el sistema. El fichero va como data-URI (6 s, 10 fps, audio
-     mudo) para que no dependa de ningún otro fichero publicado: si se rehornea
-     el escaparate, el latido viaja dentro del propio index.html. Medido: un
-     vídeo de 1 s y un solo fotograma se queda en readyState 1 sin decodificar y
-     NO cuenta como reproducción; con 10 fps reales llega a readyState 4. */
-  #latido{position:fixed;right:0;bottom:0;width:2px;height:2px;opacity:.01;
-    pointer-events:none;z-index:0;background:#000}
+  /* ── EL LATIDO: vídeo mudo en bucle A PANTALLA COMPLETA. NO es decoración ──
+     webOS da la pantalla por dormida cuando no hay reproducción de medios y
+     acaba sacando su reloj. La excepción que documenta el sistema es UNA: un
+     vídeo reproduciéndose A PANTALLA COMPLETA — su rect tiene que ocupar el
+     viewport entero. Una cajita de 2x2 px con opacidad .01 decodifica igual y
+     NO entra en la excepción (medido en el aparato). Así que el vídeo hace de
+     FONDO: ocupa la pantalla y el lienzo va encima, TRANSPARENTE — con el
+     lienzo opaco queda tapado. Su color es el del fondo de la marca, así que la
+     pantalla se ve igual; si un proyecto tuviera fondo claro, el velo se pone aquí. Va como data-URI (6 s, 10 fps, audio mudo) para que no dependa
+     de ningún otro fichero publicado: si se rehornea, el latido viaja dentro. */
+  #latido{position:fixed;inset:0;width:100%;height:100%;object-fit:cover;
+    opacity:1;pointer-events:none;z-index:-1;background:var(--fondo)}
 
   #lienzo{position:fixed;top:50%;left:50%;width:1080px;height:1920px;
     transform:translate(-50%,-50%) rotate(-90deg) scale(var(--k,1));
     transform-origin:center center;
-    display:flex;flex-direction:column;background:var(--fondo)}
+    display:flex;flex-direction:column;background:transparent;z-index:1}
 
   /* ── A · cabecera (fija) — marca, abierto, hora */
   #A{height:118px;display:grid;grid-template-columns:92px minmax(0,1fr) 92px;align-items:center;padding:0 22px;border-bottom:1px solid var(--linea)}

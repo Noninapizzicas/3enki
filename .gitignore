@@ -136,3 +136,4 @@ modules/.*/
 arquitectura/decisiones/_outputs/
 storage/esquemas/
 
+.claude/settings.local.json

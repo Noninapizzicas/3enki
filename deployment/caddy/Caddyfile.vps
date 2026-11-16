@@ -166,3 +166,70 @@ hermes.pizzepos.es {
 		format json
 	}
 }
+
+# ── Panel privado en 1.<dominio> ───────────────────────────────────────────────
+# Aislado del dominio público: la credencial de aquí NO viaja a las cartas, y su
+# 401 no puede aparecer encima de una página pública (son orígenes distintos).
+#
+# Nace invisible: X-Robots-Tag + robots.txt para que no se indexe, y no se
+# enlaza desde ningún sitio. El nombre sí queda en los logs de transparencia de
+# certificados (crt.sh) porque el cert es por host; eso es aceptado.
+#
+# LAS RUTAS DEL CORE TAMBIÉN SE PROXean AQUÍ. Si el panel vive en este subdominio
+# y llama a /ui/* o /mqtt en el dominio principal, esas llamadas pasan a ser
+# cross-origin: el navegador rechaza la cookie (Access-Control-Allow-Origin: *
+# es incompatible con credenciales) y el websocket valida el Origin. Proxyando
+# aquí, el navegador no sale nunca de 1.<dominio> y no hay CORS que configurar.
+#
+# La contraseña NO va en este fichero: vive en /etc/caddy/panel1.caddy, que
+# escribe deployment/panel1.sh y que el deploy NO pisa (igual que puerta.caddy).
+1.pizzepos.es {
+	header {
+		X-Robots-Tag "noindex, nofollow, noarchive, nosnippet"
+		X-Content-Type-Options nosniff
+		X-Frame-Options DENY
+		Referrer-Policy strict-origin-when-cross-origin
+	}
+
+	# Los buscadores no tienen nada que rastrear aquí.
+	respond /robots.txt "User-agent: *\nDisallow: /\n" 200
+
+	# Usuario y contraseña del panel (fuera del repo).
+	import /etc/caddy/panel1.caddy
+
+	# El panel habla con el core: mismo origen, sin CORS.
+	handle /ui/* {
+		reverse_proxy localhost:3000
+	}
+	handle /modules/* {
+		reverse_proxy localhost:3000
+	}
+	handle /stats {
+		reverse_proxy localhost:3000
+	}
+	handle /health {
+		reverse_proxy localhost:3000
+	}
+
+	# MQTT WebSocket (el panel y el panel de cocina).
+	handle /mqtt {
+		reverse_proxy localhost:9001
+	}
+
+	# Imágenes y vídeos de proyecto, bajo el mismo origen que el panel.
+	handle_path /a/* {
+		root * /opt/enki/public/a
+		try_files {path} {path}/index.html /index.html
+		file_server
+	}
+
+	# El resto: el frontend SvelteKit.
+	handle {
+		reverse_proxy localhost:3001
+	}
+
+	log {
+		output file /var/log/caddy/1.pizzepos.log
+		format json
+	}
+}

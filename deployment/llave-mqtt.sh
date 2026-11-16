@@ -35,7 +35,13 @@ cat > "$SNIPPET" <<EOF
 	path /mqtt
 	not query k=${TOKEN}
 }
-respond @mqtt_sin_llave 404
+# VA COMO handle, NO como respond suelto. Comprobado: un `respond` suelto junto a
+# un `handle /mqtt` NO se evalua (Caddy agrupa el enrutado) y la peticion cae en
+# el reverse_proxy al broker, que espera MQTT y deja la conexion colgada. Con
+# handle + matcher, /mqtt sin llave responde 404 y con llave pasa al broker.
+handle @mqtt_sin_llave {
+	respond 404
+}
 
 handle /mqtt {
 	reverse_proxy localhost:9001

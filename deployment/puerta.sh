@@ -46,7 +46,9 @@ SITE="enki-ai.online"
 # que quedar fuera del basic_auth o el aparato recibe 401 para siempre.
 PUBLICO="/a/* /tienda/* /glovo/* /whatsapp/* /health /mqtt \
 /favicon.ico /apple-touch-icon.png /apple-touch-icon-precomposed.png \
-/manifest.json /site.webmanifest /robots.txt /sitemap.xml"
+/manifest.json /site.webmanifest /robots.txt /sitemap.xml \
+/mail-wizard/* /.well-known/autoconfig/* /.well-known/jmap /jmap/* \
+/pizzepos/contenido/imagenes/*"
 DRY=0
 PWS=0
 for arg in "$@"; do

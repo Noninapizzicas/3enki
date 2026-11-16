@@ -129,7 +129,11 @@ fi
 # Determinar modo
 if [ -n "$DOMAIN" ]; then
     MODE="domain"
-    ORIGIN="https://${DOMAIN}"
+    # El frontend YA NO se sirve en el dominio publico: vive en 1.<dominio>.
+    # SvelteKit usa ORIGIN para construir URLs absolutas y para su proteccion
+    # CSRF: si no coincide con el Origin real de la peticion, RECHAZA los POST.
+    # Con el panel en 1.<dominio>, ORIGIN tiene que ser ese host.
+    ORIGIN="https://1.${DOMAIN}"
 else
     MODE="ip"
     # Detectar IP pública

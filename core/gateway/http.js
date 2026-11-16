@@ -1146,8 +1146,11 @@ class HTTPGateway {
         const moduleName = pathname.replace('/ui/', '');
         await this.uiGateway.renderModuleView(request, response, moduleName);
       } else {
-        // Serve static file
-        await this.uiGateway.serveStaticFile(request, response);
+        // El sistema UI legacy se retiró en 0489efe3 ("remove legacy UI system,
+        // keep only SvelteKit") y con él `serveStaticFile`. La llamada se quedó
+        // aquí: cualquier /ui/* no reconocido —/ui/request/... incluido— daba
+        // 500 "serveStaticFile is not a function" en vez de un 404 honesto.
+        await this.sendError(response, 404, 'UI not found');
       }
     } catch (error) {
       if (this.logger) {

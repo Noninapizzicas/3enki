@@ -30,7 +30,14 @@ function arg(nombre, porDefecto) {
 
 const STORAGE = arg('storage', '/opt/enki/data/projects/the-pirate/storage/pizzepos');
 const PUBLICADO = arg('publicado', '/opt/enki/public/a/the-pirate/escaparate/bloques.json');
-const CABLEADO = arg('cableado', path.join(__dirname, '..', 'ejemplos', 'the-pirate.json'));
+// El cableado REAL vive en el storage del proyecto, no en el repo. Antes el
+// default apuntaba a ejemplos/the-pirate.json (8 bloques) y comparaba esa
+// pantalla de juguete contra la de la calle: daba 18 piezas contra 44 y hacia
+// creer que el publicado estaba desincronizado del codigo. No lo estaba.
+const CABLEADO = arg('cableado', '/opt/enki/data/projects/the-pirate/storage/pantalla-tv/cableado.json');
+if (CABLEADO.includes('/ejemplos/')) {
+  console.error('AVISO: estas comparando contra un EJEMPLO del repo, no contra el cableado real del proyecto.');
+}
 
 const leer = (f, def) => { try { return JSON.parse(fs.readFileSync(path.join(STORAGE, f), 'utf8')); } catch { return def; } };
 const leerJSON = (f) => { try { return JSON.parse(fs.readFileSync(f, 'utf8')); } catch { return null; } };

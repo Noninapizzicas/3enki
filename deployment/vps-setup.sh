@@ -769,14 +769,46 @@ if [ "$MODE" = "domain" ]; then
     # Sustituir dominio hardcoded del template por el real
     sed -e "s/pizzepos\.es/${DOMAIN}/g" -e "s/pizzepos\.log/${DOMAIN}.log/g" \
         "${REPO_DIR}/deployment/caddy/Caddyfile.vps" > /etc/caddy/Caddyfile
-    # La puerta de contraseña (deployment/puerta.sh) vive en un snippet aparte
-    # para sobrevivir a este render. El Caddyfile lleva `import /etc/caddy/puerta.caddy`:
-    # si el fichero no existe al arrancar, Caddy se cae. Se crea vacío.
-    if [ ! -f /etc/caddy/puerta.caddy ]; then
-        printf '# sin puerta: lo escribe deployment/puerta.sh\n' > /etc/caddy/puerta.caddy
-        log "puerta.caddy creado vacío (aún sin contraseña)"
+    # ── El snippet de la puerta ──────────────────────────────────────────────
+    # Ya NO hay contraseña de persona en el dominio público: el panel vive en
+    # 1.<dominio>. Aquí solo queda la LLAVE DEL PANEL DE COCINA, que no sabe
+    # mandar cabeceras y la lleva en la URL del websocket.
+    #
+    # Se REGENERA EN CADA DEPLOY (idempotente). Antes había que ejecutar
+    # deployment/llave-mqtt.sh a mano; ahora fusionar + pull + deploy deja el
+    # sistema entero, sin comandos sueltos.
+    TOKEN_FILE=/etc/caddy/panel.token
+    PANEL_TOKEN=""
+    [ -f "$TOKEN_FILE" ] && PANEL_TOKEN="$(tr -d '\n' < "$TOKEN_FILE")"
+    if [ -z "$PANEL_TOKEN" ]; then
+        PANEL_TOKEN="$(openssl rand -hex 16)"
+        printf '%s\n' "$PANEL_TOKEN" > "$TOKEN_FILE"
+        chmod 600 "$TOKEN_FILE"
+        log "Llave del panel de cocina creada en ${TOKEN_FILE}"
     fi
+    cat > /etc/caddy/puerta.caddy << PUERTA
+# ── LLAVE DEL PANEL DE COCINA (generado por deployment/vps-setup.sh) ─────────
+# El chip no sabe mandar cabeceras: lleva su llave en la dirección del websocket.
+# Sin llave: 404. NO 401 — un 401 abre el diálogo de contraseña del navegador.
+@mqtt_sin_llave {
+	path /mqtt
+	not query k=${PANEL_TOKEN}
+}
+# VA COMO handle, NO como respond suelto: un respond con matcher suelto junto a
+# un handle /mqtt NO se evalúa, y la petición cae en el proxy al broker (que
+# espera MQTT) dejando la conexión colgada.
+handle @mqtt_sin_llave {
+	respond 404
+}
+
+handle /mqtt {
+	reverse_proxy localhost:9001
+}
+# ── fin ──────────────────────────────────────────────────────────────────────
+PUERTA
     chown caddy:caddy /etc/caddy/puerta.caddy 2>/dev/null || true
+    chmod 640 /etc/caddy/puerta.caddy 2>/dev/null || true
+    log "puerta.caddy regenerado (llave de cocina)"
     log "Caddyfile configurado para ${DOMAIN}"
 else
     log "Configurando Caddy para ${SERVER_IP} (HTTP)..."

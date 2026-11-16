@@ -56,8 +56,13 @@ const MANIFIESTO = {
       unit: 'enki-frontend.service',
       plantilla: path.join(DEPLOYMENT_DIR, 'systemd', 'enki-frontend.service.tmpl'),
       destino: '/etc/systemd/system/enki-frontend.service',
-      // ORIGIN = https://<dominio> (SvelteKit adapter-node lo exige para CSRF).
-      vars: { ORIGIN: 'https://{{DOMAIN}}' }
+      // ORIGIN = https://1.<dominio> (SvelteKit adapter-node lo exige para CSRF).
+      // El frontend YA NO se sirve en el dominio publico: vive en 1.<dominio>.
+      // Si ORIGIN no coincide con el Origin real de la peticion, SvelteKit
+      // RECHAZA los POST (formularios del panel, comandero, configuracion).
+      // OJO: este manifiesto manda sobre el unit que escribe vps-setup.sh —
+      // el reconciliador corre DESPUES y sobrescribe el fichero.
+      vars: { ORIGIN: 'https://1.{{DOMAIN}}' }
     },
     // El Hermes TRABAJADOR de Enki (fusión 2026-08): api_server en :8642.
     // Unit estática (sin vars de dominio) — el reconciliador la copia si difiere.

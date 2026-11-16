@@ -3,6 +3,19 @@
 # Caddy obtiene certificados HTTPS automáticamente via Let's Encrypt.
 # Event-core corre en localhost:3000, frontend SvelteKit en localhost:3001.
 #
+# ── DOS SUPERFICIES ──────────────────────────────────────────────────────────
+#
+#   pizzepos.es        PÚBLICO. Solo cartas, pedidos y webhooks. Sin contraseña.
+#                      Todo lo que no esté en la lista responde 404.
+#
+#   1.pizzepos.es      PRIVADO. El panel, el chat, el comandero y la cocina.
+#                      Sin contraseña: se protege por aislamiento (otro origen)
+#                      y por no estar enlazado ni indexado.
+#
+# El aislamiento es lo que arregla el problema de fondo: un 401 del panel ya no
+# puede aparecer encima de una carta, porque son orígenes distintos. Y las
+# cartas no comparten credenciales con nada.
+#
 # Usado por: deployment/vps-setup.sh (crea enki.service + enki-frontend.service)
 #
 # Instalación:
@@ -16,31 +29,13 @@
 #   - enki-frontend.service corriendo en localhost:3001 (node frontend/build/index.js)
 
 pizzepos.es {
-	# Puerta de contraseña. El snippet lo escribe deployment/puerta.sh y NO lo
-	# pisa el deploy (se reescribe este fichero, no el snippet). Sin contraseña
-	# puesta, el snippet existe vacío y el import no hace nada.
-	import /etc/caddy/puerta.caddy
-
-	# API REST → event-core HTTP gateway
-	handle /modules/* {
-		reverse_proxy localhost:3000
-	}
+	# ── PÚBLICO ──────────────────────────────────────────────────────────────
+	# Nada de aquí pide contraseña. Es deliberado: un 401 abre el diálogo del
+	# navegador ENCIMA de la página que estés viendo, aunque la página sea
+	# pública. Por eso lo privado no vive aquí: vive en 1.<dominio>.
 
 	handle /health {
 		reverse_proxy localhost:3000
-	}
-
-	handle /stats {
-		reverse_proxy localhost:3000
-	}
-
-	handle /ui/* {
-		reverse_proxy localhost:3000
-	}
-
-	# MQTT WebSocket → broker Aedes
-	handle /mqtt {
-		reverse_proxy localhost:9001
 	}
 
 	# Canal TELEGRAM de pedidos — el borrador que pide la carta. Mismo patrón que
@@ -107,6 +102,12 @@ pizzepos.es {
 		reverse_proxy localhost:3100
 	}
 
+	# El BUS se queda aquí porque la cocina (ESP32) entra por wss en 443.
+	# Su llave viaja en la URL (?k=...). Lo escribe deployment/llave-mqtt.sh en
+	# un snippet aparte que el deploy no pisa. Sin llave responde 404, NO 401:
+	# un 401 abriría el diálogo de contraseña en cualquier navegador.
+	import /etc/caddy/puerta.caddy
+
 	# NAMESPACE PÚBLICO GLOBAL `/<public_ns>/` (por defecto /a/). UN solo bloque
 	# sirve TODAS las superficies de TODOS los proyectos: cada superficie (shop,
 	# oraculo, …) es una subcarpeta de /opt/enki/public/<ns>/, y cada proyecto un
@@ -125,9 +126,12 @@ pizzepos.es {
 	# /glovo ni el frontend.
 	# @@NAMESPACE@@
 
-	# Frontend SvelteKit (adapter-node) → todo lo demás
+	# TODO LO DEMÁS NO EXISTE EN EL DOMINIO PÚBLICO.
+	# Aquí vivían /ui/*, /modules/*, /stats y el frontend (panel, chat, comandero,
+	# cocina). Ahora están en 1.<dominio>. Un 404 no revela nada y no abre ningún
+	# diálogo; un 401 sí.
 	handle {
-		reverse_proxy localhost:3001
+		respond 404
 	}
 
 	# Headers de seguridad
@@ -167,22 +171,21 @@ hermes.pizzepos.es {
 	}
 }
 
-# ── Panel privado en 1.<dominio> ───────────────────────────────────────────────
-# Aislado del dominio público: la credencial de aquí NO viaja a las cartas, y su
-# 401 no puede aparecer encima de una página pública (son orígenes distintos).
+# ── PRIVADO: 1.<dominio> ──────────────────────────────────────────────────────
+# El panel, el chat, el comandero, la cocina y la configuración de proyectos.
+# Las rutas llevan SIEMPRE el slug del proyecto: /<slug>/chat, /<slug>/comandero,
+# /<slug>/cocina. El layout del frontend resuelve slug → UUID y normaliza la URL
+# al slug (frontend/src/routes/[project_id]/+layout.svelte).
 #
-# Nace invisible: X-Robots-Tag + robots.txt para que no se indexe, y no se
-# enlaza desde ningún sitio. El nombre sí queda en los logs de transparencia de
-# certificados (crt.sh) porque el cert es por host; eso es aceptado.
+# SIN CONTRASEÑA, por decisión del dueño. Lo que protege es:
+#   · ser otro origen (su 401 no puede salir en una carta)
+#   · no estar enlazado desde ningún sitio
+#   · no indexarse (X-Robots-Tag + robots.txt)
 #
-# LAS RUTAS DEL CORE TAMBIÉN SE PROXean AQUÍ. Si el panel vive en este subdominio
-# y llama a /ui/* o /mqtt en el dominio principal, esas llamadas pasan a ser
-# cross-origin: el navegador rechaza la cookie (Access-Control-Allow-Origin: *
-# es incompatible con credenciales) y el websocket valida el Origin. Proxyando
-# aquí, el navegador no sale nunca de 1.<dominio> y no hay CORS que configurar.
-#
-# La contraseña NO va en este fichero: vive en /etc/caddy/panel1.caddy, que
-# escribe deployment/panel1.sh y que el deploy NO pisa (igual que puerta.caddy).
+# LAS RUTAS DEL CORE SE PROXean AQUÍ. Si el panel vive en este subdominio y llama
+# a /ui/* o /mqtt en el dominio principal, esas llamadas pasan a ser cross-origin:
+# el navegador rechaza la cookie y el websocket valida el Origin. Proxyando aquí,
+# el navegador no sale nunca de 1.<dominio> y no hay CORS que configurar.
 1.pizzepos.es {
 	header {
 		X-Robots-Tag "noindex, nofollow, noarchive, nosnippet"
@@ -193,9 +196,6 @@ hermes.pizzepos.es {
 
 	# Los buscadores no tienen nada que rastrear aquí.
 	respond /robots.txt "User-agent: *\nDisallow: /\n" 200
-
-	# Usuario y contraseña del panel (fuera del repo).
-	import /etc/caddy/panel1.caddy
 
 	# El panel habla con el core: mismo origen, sin CORS.
 	handle /ui/* {
@@ -211,7 +211,7 @@ hermes.pizzepos.es {
 		reverse_proxy localhost:3000
 	}
 
-	# MQTT WebSocket (el panel y el panel de cocina).
+	# MQTT WebSocket (panel y cocina).
 	handle /mqtt {
 		reverse_proxy localhost:9001
 	}
@@ -223,7 +223,8 @@ hermes.pizzepos.es {
 		file_server
 	}
 
-	# El resto: el frontend SvelteKit.
+	# El resto: el frontend SvelteKit. Aquí entran /<slug>/chat, /<slug>/comandero,
+	# /<slug>/cocina y todas las páginas de proyecto.
 	handle {
 		reverse_proxy localhost:3001
 	}

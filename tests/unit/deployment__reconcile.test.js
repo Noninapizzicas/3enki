@@ -85,9 +85,17 @@ test('deja {{VAR}} intacta si no hay valor', () => {
 });
 test('render de ORIGIN del enki-frontend: {{DOMAIN}} anidado', () => {
   const tmpl = leerPlantillaFrontend();
-  const origin = renderPlantilla('https://{{DOMAIN}}', { DOMAIN: 'enki-ai.online' });
+  // El valor sale del MANIFIESTO, no de una copia a mano: así el test cae si
+  // alguien cambia el ORIGIN real. Con una copia literal, el manifiesto podía
+  // quedarse en https://<dominio> y el test seguir en verde (pasó con la
+  // migración a 1.<dominio>).
+  const plantillaOrigin = MANIFIESTO.servicios['enki-frontend'].vars.ORIGIN;
+  const origin = renderPlantilla(plantillaOrigin, { DOMAIN: 'enki-ai.online' });
   const out = renderPlantilla(tmpl, { ORIGIN: origin });
-  assert.ok(out.includes('Environment=ORIGIN=https://enki-ai.online'), 'ORIGIN renderizado');
+  assert.ok(
+    out.includes('Environment=ORIGIN=https://1.enki-ai.online'),
+    'ORIGIN renderizado con el subdominio privado'
+  );
   assert.ok(!out.includes('{{'), 'sin placeholders sin sustituir');
 });
 

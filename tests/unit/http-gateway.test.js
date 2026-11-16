@@ -96,9 +96,7 @@ async function runTests() {
   });
 
   await test('HTTPGateway: debe iniciar servidor HTTP', async () => {
-    // Puerto fuera del rango de producción: 3001 es el frontend de Enki y está
-    // ocupado en este host → EADDRINUSE que tumbaba la suite entera.
-    const gateway = new HTTPGateway({ port: process.env.PORT_TEST || 31301 });
+    const gateway = new HTTPGateway({ port: process.env.PORT || 3001 });
     await gateway.start();
     assert(gateway.isRunning === true, 'Gateway está corriendo');
     assert(gateway.stats.started_at !== null, 'Timestamp de inicio registrado');

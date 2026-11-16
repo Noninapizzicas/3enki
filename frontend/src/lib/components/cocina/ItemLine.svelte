@@ -49,11 +49,7 @@
   $: ingredientesAlGusto = (item.ingredientes || []).map(parseIngrediente);
 
   // — Ingredientes base (todos los productos) —
-  // OJO: `hasIngredientesBase` se declara UNA vez, más abajo, cuando ya existe
-  // `baseList` (los ingredientes en orden de montaje, sin los que el cliente
-  // quitó). Aquí había una segunda declaración `$:` y el bundle no compilaba
-  // («Identifier "hasIngredientesBase" has already been declared»), lo que
-  // bloqueaba cualquier deploy del frontend.
+  $: hasIngredientesBase = !isMitad && !isAlGusto && item.ingredientes_base?.length;
 
   // — Variaciones (quitar / añadir) —
   $: quitarList = extractQuitar(item);

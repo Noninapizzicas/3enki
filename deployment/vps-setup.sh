@@ -129,7 +129,11 @@ fi
 # Determinar modo
 if [ -n "$DOMAIN" ]; then
     MODE="domain"
-    ORIGIN="https://${DOMAIN}"
+    # El frontend YA NO se sirve en el dominio publico: vive en 1.<dominio>.
+    # SvelteKit usa ORIGIN para construir URLs absolutas y para su proteccion
+    # CSRF: si no coincide con el Origin real de la peticion, RECHAZA los POST.
+    # Con el panel en 1.<dominio>, ORIGIN tiene que ser ese host.
+    ORIGIN="https://1.${DOMAIN}"
 else
     MODE="ip"
     # Detectar IP pública
@@ -773,15 +777,6 @@ if [ "$MODE" = "domain" ]; then
         log "puerta.caddy creado vacío (aún sin contraseña)"
     fi
     chown caddy:caddy /etc/caddy/puerta.caddy 2>/dev/null || true
-    # La credencial del panel privado (1.<dominio>) vive fuera del repo, igual que
-    # la puerta: si el fichero no existe al arrancar, el `import` del Caddyfile
-    # rompe Caddy. Se crea vacío; lo rellena deployment/panel1.sh.
-    if [ ! -f /etc/caddy/panel1.caddy ]; then
-        printf '# sin credencial: la escribe deployment/panel1.sh\n' > /etc/caddy/panel1.caddy
-        log "panel1.caddy creado vacío (aún sin contraseña)"
-    fi
-    chown caddy:caddy /etc/caddy/panel1.caddy 2>/dev/null || true
-    chmod 640 /etc/caddy/panel1.caddy 2>/dev/null || true
     log "Caddyfile configurado para ${DOMAIN}"
 else
     log "Configurando Caddy para ${SERVER_IP} (HTTP)..."

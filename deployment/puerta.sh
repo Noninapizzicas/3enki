@@ -30,25 +30,12 @@ SITE="enki-ai.online"
 # Lo que sigue abierto sin contraseña: carta pública, pedidos web, Glovo,
 # WhatsApp, el healthcheck y el WebSocket del bus (/mqtt).
 #
-# Rutas que el NAVEGADOR pide por su cuenta (2026-11-15): al abrir cualquier
-# pagina pide /favicon.ico, y Chrome Android anade /apple-touch-icon*.png y
-# /manifest.json. No estaban en la lista, asi que respondian 401 con
-# WWW-Authenticate — y el navegador NO asocia ese 401 a la ruta, lo asocia al
-# ORIGEN: abre el dialogo de contrasena ENCIMA de la pagina publica que estes
-# mirando. Efecto: "/a/<proyecto>/ me pide contrasena" cuando la pagina carga
-# perfectamente. La APK no las pedia (por eso no le pasaba); Brave y Chrome si.
-# Son rutas inertes: si no existen dan 404, que no abre ningun dialogo.
-#
 # /mqtt fuera de la puerta (2026-11-02): el panel de cocina (ESP32-P4) no tiene
 # navegador ni nadie que teclee una contraseña, y esp-mqtt no sabe mandar
 # cabeceras HTTP. Su red (WiFi de hostelería) solo deja salir por 80/443, así
 # que 1883 no es camino: entra por wss://enki-ai.online/mqtt, y esa ruta tiene
 # que quedar fuera del basic_auth o el aparato recibe 401 para siempre.
-PUBLICO="/a/* /tienda/* /glovo/* /whatsapp/* /health /mqtt \
-/favicon.ico /apple-touch-icon.png /apple-touch-icon-precomposed.png \
-/manifest.json /site.webmanifest /robots.txt /sitemap.xml \
-/mail-wizard/* /.well-known/autoconfig/* /.well-known/jmap /jmap/* \
-/pizzepos/contenido/imagenes/*"
+PUBLICO="/a/* /tienda/* /glovo/* /whatsapp/* /health /mqtt"
 DRY=0
 PWS=0
 for arg in "$@"; do

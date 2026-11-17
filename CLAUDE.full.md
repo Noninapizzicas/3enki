@@ -2910,36 +2910,34 @@ CLASE Ingrediente {
 > el 10 de la carta: el motor rechazaba el 6º extra que la carta sí permite. El campo viejo queda solo
 > como respaldo cuando la carta no declara opciones (derivadas).
 
-> **LA LISTA ANCHA EN LAS CATEGORÍAS DE PIZZA (v4.7.0, orden del dueño 2026-11-17).** El «Añadir»
-> del comandero ofrecía solo los ingredientes de la familia del producto (filtro por `grupos` en el
-> panel, derivado de la paleta de la categoría). Dueño: *«en La Flota y en Puerto Seguro debe enseñar
-> todos los ingredientes, como la carta digital; de momento solo en esas dos»*. Ahora, cuando la
-> categoría es de pizza —la MISMA puerta que enciende «Crea tu pizza» (`isPizzaCat`: `tipo: 'pizzas'`
-> o id/nombre con raíz *pizz*)— `_configurar` completa `ELEGIR_VARIOS` con el **catálogo entero**
-> (unión de ingredientes de toda la carta + extras ya declarados) menos lo que el producto ya lleva.
-> Precio de cada extra: el que la carta YA declara (no se re-precian los existentes) y, para los que
-> nadie había declarado, su `precio_extra` del catálogo. En el resto de categorías (El Fardel, Las
-> Calas, Bebidas) las opciones quedan **intactas**. `_configurarLista` recibe `{categorias}` para
-> resolver la puerta; sin ellas cae al id de la categoría.
+> **LA CARTA ES LA VERDAD; LA PALETA ES DE LA FAMILIA (v4.8.0, 2026-11-17).** El «Añadir» del
+> comandero sale de lo que la carta DECLARA en `opciones` (ya actualizables vía
+> `carta.update_products`). Si aún no lo declara, se DERIVA con la paleta de su FAMILIA —
+> `categorias[].tipo`, la familia canónica del slug—: `pizzas` = La Flota + Puerto Seguro, UNA lista
+> común; `bocatas` = El Fardel, la suya. Una categoría sin `tipo` cae a su propio id (comportamiento
+> viejo; no se inventa nada).
 >
-> El gemelo del cobro: `comandero._extrasDeCarta` amplía su mapa de precios con los mismos
-> ingredientes no declarados (mismo precio), así el panel y el tasador ven **el mismo número** — sin
-> esto el tasador marcaba `EXTRA_DESCONOCIDO` y cobraba 0 por un extra que el panel pintaba con precio.
+> Se retiran las tres piezas de v4.7.0 que metían a la fuerza el catálogo entero en las categorías de
+> pizza: `_catalogoGlobal`, `_deltasDeclarados` y la puerta `_esCategoriaDePizza`. La lista ancha no
+> era el DATO, era código: ahora la familia lo hace como dato de la carta y el resultado se corrige
+> producto a producto (`carta.update_products`) sin tocar el módulo. `_configurar` queda en una sola
+> rama — opciones declaradas o `derivarOpciones` con la paleta de la familia.
+>
+> El gemelo del cobro no cambia: `comandero._extrasDeCarta` sigue leyendo los precios que la carta
+> declara, así el panel y el tasador ven **el mismo número**.
 
 ```
 CLASE VariacionesModule HEREDA BaseModule {
   ATRIBUTOS {
     name: String = 'variaciones'
-    version: String = '4.6.1'
+    version: String = '4.8.0'
     configuraciones: Map<producto_id, ConfigProducto>   // en memoria, lost_on_restart
     _hidratando: Map<project_id, Promise>               // viajes en vuelo (una RPC por proyecto)
   }
 
   METODOS {
-    _configurar(producto_id, {categoria, precio, variaciones, ingredientes_base, opciones, paleta,
-                              paletaGlobal, deltasDeclarados, catPizza})
-      catPizza (categoría de pizza): ELEGIR_VARIOS = lo declarado + TODO el catálogo (menos lo propio)
-      resto: opciones = las de la CARTA si las trae; si no, derivarOpciones(QUITAR propios + ELEGIR_VARIOS paleta de su categoría)
+    _configurar(producto_id, {categoria, precio, variaciones, ingredientes_base, opciones, paleta})
+      opciones = las de la CARTA si las trae; si no, derivarOpciones(QUITAR propios + ELEGIR_VARIOS la paleta de su FAMILIA)
       max_ingredientes_extra = opciones.ELEGIR_VARIOS.max  ??  variaciones.max_ingredientes_extra  ??  5
 
     _configDeProducto(producto_id, project_id)          // el acto crea el estado
@@ -5069,6 +5067,16 @@ CLASE ProductosProyector IMPLEMENTA ProductosContract {
     // (una carta de canal habría vuelto a pisar precios de mostrador). tarifas responde un
     // snapshot por proyecto conocido; mismo patrón que comandero.onLoad.
 }
+
+// ─── LA CARTA ES LA VERDAD DE LAS OPCIONES Y LA FAMILIA ES DATO (carta-manager v2.11.0, 2026-11-17) ───
+// `opciones` entra en los campos actualizables de update_product / update_products, validada contra
+// motor-opciones (modo conocido, valores con id, delta en céntimos). ANTES solo el ALTA podía
+// fijarlas: update_product las tiraba EN SILENCIO y la paleta de un producto quedaba congelada para
+// siempre — el único camino era borrar y recrear la ficha, que cambia el id y rompe el histórico.
+// `tipo` es la FAMILIA canónica de la categoría (slug): agrupa subfamilias («pizzas» = La Flota +
+// Puerto Seguro) y de ella sale la paleta común de «Añadir». add_category lo acepta; el op nuevo
+// update_category (carta.update_category.request) lo corrige sin borrar la categoría, y '' la borra.
+// Reflejo JS v1.17.0.
 
 CLASE Producto {                        // el shape que viaja por la carta
   id            : String                // determinista: slug(categoria_id) + '_' + slug(nombre)

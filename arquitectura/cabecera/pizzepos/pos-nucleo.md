@@ -16,7 +16,7 @@ fuentes:
   - modules/pizzepos/tarifas/**
   - modules/pizzepos/persistencia-comandero/**
   - modules/pizzepos/impresion/**
-verificado: 2026-11-17 (variaciones v4.7.0: en las categorías de pizza el «Añadir» del comandero ofrece TODO el catálogo —la misma lista que la carta digital— y no solo la familia; El Fardel, Las Calas y Bebidas intactas; el mapa de precios del comandero se amplía con los mismos ingredientes para que panel y tasador cobren igual; además, el frontend volvía a compilar —el `$:` duplicado de `hasIngredientesBase` en cocina/ItemLine rompía el build y el POS servía bundle viejo) · 2026-11-10 (confirmacion-pedido v1.2: la espera tiene DOS tramos — a los 10 min un último mensaje amable «¿serías tan amable de confirmarnos el pedido?» y otros 10 min después se retira; la respuesta del cliente se acepta en los DOS shapes del bus —el de whatsapp-bot (`from`/`text`/`project_slug`) y el del puente Rust (`de`/`texto`/`slug`/`id`), sin el cual el «sí» se ignoraba en silencio—; pedidos retira pedido Y cuenta con `_retirarPedido` (también en el NO), notificador avisa a la barra con el mismo `pedido.sin_confirmar`) · 2026-11-10 (el segundo mensaje pide la confirmación con amabilidad) · 2026-11-07 (ubicación del cliente: pin opcional en el #P1, mapa del reparto al staff) · 2026-11-06 (entrega a domicilio: el modo 'domicilio' existe como MODO, no como canal — cuentas lo canoniza a 'llevar' para que nazca ticket que se cierra al cobrar y no cuenta huérfana; pedidos exige direccion_entrega y cliente_telefono en la puerta (400 sin ellos) y el comandero acepta notas_generales por parámetro para que el destino se imprima en el ticket de cocina)
+verificado: 2026-11-17 (variaciones v4.8.0: la paleta de «Añadir» sale de lo que la carta DECLARA en `opciones` —ya corregibles producto a producto— y, cuando aún no lo declara, de la FAMILIA de su categoría (`categorias[].tipo`: `pizzas` = La Flota + Puerto Seguro → una lista común; `bocatas` = El Fardel → la suya), nunca de un catálogo global; se retiran `_catalogoGlobal`, `_deltasDeclarados` y la puerta `_esCategoriaDePizza` de v4.7.0 y `_configurar` queda en una sola rama; el máximo y los precios siguen siendo los de la carta) · 2026-11-17 (variaciones v4.7.0: en las categorías de pizza el «Añadir» del comandero ofrece TODO el catálogo —la misma lista que la carta digital— y no solo la familia; El Fardel, Las Calas y Bebidas intactas; el mapa de precios del comandero se amplía con los mismos ingredientes para que panel y tasador cobren igual; además, el frontend volvía a compilar —el `$:` duplicado de `hasIngredientesBase` en cocina/ItemLine rompía el build y el POS servía bundle viejo) · 2026-11-10 (confirmacion-pedido v1.2: la espera tiene DOS tramos — a los 10 min un último mensaje amable «¿serías tan amable de confirmarnos el pedido?» y otros 10 min después se retira; la respuesta del cliente se acepta en los DOS shapes del bus —el de whatsapp-bot (`from`/`text`/`project_slug`) y el del puente Rust (`de`/`texto`/`slug`/`id`), sin el cual el «sí» se ignoraba en silencio—; pedidos retira pedido Y cuenta con `_retirarPedido` (también en el NO), notificador avisa a la barra con el mismo `pedido.sin_confirmar`) · 2026-11-10 (el segundo mensaje pide la confirmación con amabilidad) · 2026-11-07 (ubicación del cliente: pin opcional en el #P1, mapa del reparto al staff) · 2026-11-06 (entrega a domicilio: el modo 'domicilio' existe como MODO, no como canal — cuentas lo canoniza a 'llevar' para que nazca ticket que se cierra al cobrar y no cuenta huérfana; pedidos exige direccion_entrega y cliente_telefono en la puerta (400 sin ellos) y el comandero acepta notas_generales por parámetro para que el destino se imprima en el ticket de cocina)
 ---
 
 # PizzePOS Módulos — Subsistema de Punto de Venta (v3.2.0)
@@ -748,36 +748,34 @@ CLASE Ingrediente {
 > el 10 de la carta: el motor rechazaba el 6º extra que la carta sí permite. El campo viejo queda solo
 > como respaldo cuando la carta no declara opciones (derivadas).
 
-> **LA LISTA ANCHA EN LAS CATEGORÍAS DE PIZZA (v4.7.0, orden del dueño 2026-11-17).** El «Añadir»
-> del comandero ofrecía solo los ingredientes de la familia del producto (filtro por `grupos` en el
-> panel, derivado de la paleta de la categoría). Dueño: *«en La Flota y en Puerto Seguro debe enseñar
-> todos los ingredientes, como la carta digital; de momento solo en esas dos»*. Ahora, cuando la
-> categoría es de pizza —la MISMA puerta que enciende «Crea tu pizza» (`isPizzaCat`: `tipo: 'pizzas'`
-> o id/nombre con raíz *pizz*)— `_configurar` completa `ELEGIR_VARIOS` con el **catálogo entero**
-> (unión de ingredientes de toda la carta + extras ya declarados) menos lo que el producto ya lleva.
-> Precio de cada extra: el que la carta YA declara (no se re-precian los existentes) y, para los que
-> nadie había declarado, su `precio_extra` del catálogo. En el resto de categorías (El Fardel, Las
-> Calas, Bebidas) las opciones quedan **intactas**. `_configurarLista` recibe `{categorias}` para
-> resolver la puerta; sin ellas cae al id de la categoría.
+> **LA CARTA ES LA VERDAD; LA PALETA ES DE LA FAMILIA (v4.8.0, 2026-11-17).** El «Añadir» del
+> comandero sale de lo que la carta DECLARA en `opciones` (ya actualizables vía
+> `carta.update_products`). Si aún no lo declara, se DERIVA con la paleta de su FAMILIA —
+> `categorias[].tipo`, la familia canónica del slug—: `pizzas` = La Flota + Puerto Seguro, UNA lista
+> común; `bocatas` = El Fardel, la suya. Una categoría sin `tipo` cae a su propio id (comportamiento
+> viejo; no se inventa nada).
 >
-> El gemelo del cobro: `comandero._extrasDeCarta` amplía su mapa de precios con los mismos
-> ingredientes no declarados (mismo precio), así el panel y el tasador ven **el mismo número** — sin
-> esto el tasador marcaba `EXTRA_DESCONOCIDO` y cobraba 0 por un extra que el panel pintaba con precio.
+> Se retiran las tres piezas de v4.7.0 que metían a la fuerza el catálogo entero en las categorías de
+> pizza: `_catalogoGlobal`, `_deltasDeclarados` y la puerta `_esCategoriaDePizza`. La lista ancha no
+> era el DATO, era código: ahora la familia lo hace como dato de la carta y el resultado se corrige
+> producto a producto (`carta.update_products`) sin tocar el módulo. `_configurar` queda en una sola
+> rama — opciones declaradas o `derivarOpciones` con la paleta de la familia.
+>
+> El gemelo del cobro no cambia: `comandero._extrasDeCarta` sigue leyendo los precios que la carta
+> declara, así el panel y el tasador ven **el mismo número**.
 
 ```
 CLASE VariacionesModule HEREDA BaseModule {
   ATRIBUTOS {
     name: String = 'variaciones'
-    version: String = '4.6.1'
+    version: String = '4.8.0'
     configuraciones: Map<producto_id, ConfigProducto>   // en memoria, lost_on_restart
     _hidratando: Map<project_id, Promise>               // viajes en vuelo (una RPC por proyecto)
   }
 
   METODOS {
-    _configurar(producto_id, {categoria, precio, variaciones, ingredientes_base, opciones, paleta,
-                              paletaGlobal, deltasDeclarados, catPizza})
-      catPizza (categoría de pizza): ELEGIR_VARIOS = lo declarado + TODO el catálogo (menos lo propio)
-      resto: opciones = las de la CARTA si las trae; si no, derivarOpciones(QUITAR propios + ELEGIR_VARIOS paleta de su categoría)
+    _configurar(producto_id, {categoria, precio, variaciones, ingredientes_base, opciones, paleta})
+      opciones = las de la CARTA si las trae; si no, derivarOpciones(QUITAR propios + ELEGIR_VARIOS la paleta de su FAMILIA)
       max_ingredientes_extra = opciones.ELEGIR_VARIOS.max  ??  variaciones.max_ingredientes_extra  ??  5
 
     _configDeProducto(producto_id, project_id)          // el acto crea el estado

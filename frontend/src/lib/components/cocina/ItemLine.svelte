@@ -48,8 +48,9 @@
   $: isAlGusto = item.tipo === 'al_gusto' && item.ingredientes?.length;
   $: ingredientesAlGusto = (item.ingredientes || []).map(parseIngrediente);
 
-  // — Ingredientes base (todos los productos) —
-  $: hasIngredientesBase = !isMitad && !isAlGusto && item.ingredientes_base?.length;
+  // — Ingredientes base (todos los productos) — se cuentan más abajo, sobre `baseList`, que ya
+  //   excluye los que el cliente quitó. (Aquí había un `$:` duplicado —dos veces declared— que
+  //   rompía el build del frontend: `Identifier "hasIngredientesBase" has already been declared`.)
 
   // — Variaciones (quitar / añadir) —
   $: quitarList = extractQuitar(item);

@@ -303,7 +303,11 @@ function publishedOf(mocks, name) {
     assert.deepStrictEqual(texas.ingredientes_base, ['bacon', 'queso']);
     const marga = m.configuraciones.get('pizzas_margarita');
     assert.strictEqual(marga.permite_anadir, true);              // default: SI se puede anadir salvo negacion explicita
-    assert.strictEqual(marga.max_ingredientes_extra, 5);          // default
+    // Con «Añadir» presente (2026-11-17: en categorías de pizza la lista es el catálogo entero), el
+    // máximo efectivo es el de la derivación (10), no el 5 del camino viejo — que solo se alcanzaba
+    // porque la lista nacía VACÍA. El candado que importa (el max declarado por la carta manda sobre
+    // el campo viejo) vive en pizzepos__variaciones-opciones.test.js.
+    assert.strictEqual(marga.max_ingredientes_extra, 10);
     // pidió la carta al reflejo de productos
     assert.ok(mocks.uiHandled.some(([d, a]) => d === 'productos' && a === 'carta_completa'));
     await m.onUnload();

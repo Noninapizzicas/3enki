@@ -375,5 +375,50 @@ async function testAsync(desc, fn) {
     assert.strictEqual(promo[0][1].carta_id, 'carta_primera');
   });
 
+  await testAsync('update_products escribe `opciones` (campo de primera clase, no se tira en silencio)', async () => {
+    const store = { [CARTA_PATH]: JSON.stringify(cartaInicial()) };
+    const { m } = makeReflejo(store);
+    await m._addProduct({ ...base, producto: { nombre: 'Margarita', precio: 9, categoria_id: 'hamburguesas', ingredientes: [{ nombre: 'Mozzarella' }] } });
+    const r = await m._updateProducts({ ...base, updates: [{ producto_id: 'hamburguesas_margarita', campos: {
+      opciones: [
+        { id: 'sin', etiqueta: 'Sin', modo: 'QUITAR', valores: [{ id: 'mozzarella', delta_precio_centimos: 0 }] },
+        { etiqueta: 'Añadir', modo: 'ELEGIR_VARIOS', min: 0, max: 10, valores: [{ id: 'bacon', etiqueta: 'Bacon', delta_precio: 0.5 }] }
+      ]
+    } }] });
+    assert.strictEqual(r.status, 200);
+    const p = JSON.parse(store[CARTA_PATH]).productos[0];
+    assert.deepStrictEqual(p.opciones.map(o => o.id), ['sin', 'anadir']);
+    const anadir = p.opciones[1];
+    assert.strictEqual(anadir.modo, 'ELEGIR_VARIOS');
+    assert.strictEqual(anadir.max, 10);
+    assert.strictEqual(anadir.valores[0].delta_precio_centimos, 50);   // € → céntimos
+  });
+
+  await testAsync('update_products rechaza una opción con modo inventado (422, no escribe a medias)', async () => {
+    const store = { [CARTA_PATH]: JSON.stringify(cartaInicial()) };
+    const { m } = makeReflejo(store);
+    await m._addProduct({ ...base, producto: { nombre: 'Margarita', precio: 9, categoria_id: 'hamburguesas' } });
+    const antes = JSON.parse(store[CARTA_PATH]).meta.version;
+    const r = await m._updateProducts({ ...base, updates: [{ producto_id: 'hamburguesas_margarita', campos: {
+      opciones: [{ id: 'x', modo: 'INVENTADO', valores: [{ id: 'a' }] }]
+    } }] });
+    assert.notStrictEqual(r.status, 200);
+    assert.strictEqual(JSON.parse(store[CARTA_PATH]).meta.version, antes, 'una opción inválida escribió versión nueva');
+  });
+
+  await testAsync('update_category declara la FAMILIA canónica (tipo) sin borrar la categoría', async () => {
+    const store = { [CARTA_PATH]: JSON.stringify(cartaInicial()) };
+    const { m } = makeReflejo(store);
+    const r = await m._updateCategory({ ...base, categoria_id: 'hamburguesas', campos: { tipo: 'Pizzas' } });
+    assert.strictEqual(r.status, 200);
+    const cat = JSON.parse(store[CARTA_PATH]).categorias[0];
+    assert.strictEqual(cat.id, 'hamburguesas');       // la categoría sigue (sus productos cuelgan de ella)
+    assert.strictEqual(cat.nombre, 'Hamburguesas');
+    assert.strictEqual(cat.tipo, 'pizzas');           // slug canónico, no texto libre
+    // '' borra la familia (la categoría deja de pertenecer a ninguna)
+    await m._updateCategory({ ...base, categoria_id: 'hamburguesas', campos: { tipo: '' } });
+    assert.strictEqual(JSON.parse(store[CARTA_PATH]).categorias[0].tipo, undefined);
+  });
+
   console.log('\nTodos los tests pasaron.');
 })().catch(e => { console.error(e); process.exit(1); });

@@ -355,7 +355,9 @@ function publishedOf(mocks, name) {
     const path = require('path');
     const manifestPath = path.resolve(__dirname, '../../modules/conversacion/ai-gateway/module.json');
     const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
-    assert.strictEqual(manifest.version, '2.36.0');
+    // La versión exacta envejece sola (2.36 → 2.38 rompió este test sin que nada estuviera mal):
+    // aquí se canda el CONTRATO — el par response/failed declarado — no el número.
+    assert.match(String(manifest.version), /^\d+\.\d+\.\d+$/);
     const publishNames = (manifest.publishes || []).map(p => typeof p === 'string' ? p : p.event);
     assert.ok(publishNames.includes('llm.complete.response'),
       `manifest.publishes debe incluir llm.complete.response. Tiene: ${publishNames.join(', ')}`);

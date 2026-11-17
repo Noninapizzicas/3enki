@@ -12,16 +12,24 @@ const BaseModule = require('../../_shared/base-module');
 const { derivarOpciones } = require('../../_shared/derivar-opciones');
 const { evaluarProducto } = require('../../_shared/motor-opciones');
 
-// Paleta de ingredientes "para sumar" por categoría: unión de los ingredientes de los productos de
-// esa categoría (con su precio_extra si la carta lo trae). Alimenta el modo ELEGIR_VARIOS al derivar.
-function _paletasPorCategoria(carta) {
-  const porCat = new Map();
+// Paleta de ingredientes «para sumar» por FAMILIA (categorias[].tipo): unión de los ingredientes
+// de todas las categorías de la misma familia. 'pizzas' = La Flota + Puerto Seguro → UNA lista;
+// 'bocatas' → la suya. La familia es DATO de la carta, no una regla de código: aquí solo se lee.
+// Una categoría sin familia declarada cae a su propio id (comportamiento viejo, sin inventar).
+function _paletasPorFamilia(carta) {
+  const categorias = (carta && Array.isArray(carta.categorias)) ? carta.categorias : [];
   const productos = (carta && Array.isArray(carta.productos)) ? carta.productos : [];
+  const familiaDe = new Map();
+  for (const c of categorias) {
+    if (c && c.id) familiaDe.set(c.id, (c.tipo && String(c.tipo)) || c.id);
+  }
+  const porFam = new Map();
   for (const p of productos) {
     const cat = p && (p.categoria_id || p.categoria);
     if (!cat) continue;
-    if (!porCat.has(cat)) porCat.set(cat, new Map());
-    const m = porCat.get(cat);
+    const fam = familiaDe.get(cat) || cat;
+    if (!porFam.has(fam)) porFam.set(fam, new Map());
+    const m = porFam.get(fam);
     const lista = (Array.isArray(p.ingredientes_base) && p.ingredientes_base.length)
       ? p.ingredientes_base : (Array.isArray(p.ingredientes) ? p.ingredientes : []);
     for (const ing of lista) {
@@ -29,90 +37,16 @@ function _paletasPorCategoria(carta) {
       m.set(ing.id, { id: ing.id, nombre: ing.nombre, emoji: ing.emoji, familia: ing.familia, precio_extra: ing.precio_extra, disponible: ing.disponible });
     }
   }
-  const out = new Map();
-  for (const [cat, m] of porCat) out.set(cat, [...m.values()]);
-  return out;
-}
-
-// Catálogo GLOBAL: unión de TODOS los ingredientes que la carta declara (primero gana), con su
-// precio. Es la paleta que la carta digital ya ofrece en «Añadir extras» (extrasForGroup, orden del
-// dueño 2026-10-28: «los extras son TODO el catálogo») y la misma que el pedido-tasador usa para
-// precia. Aquí se usa en las categorías de pizza para que el comandero ofrezca lo mismo.
-function _catalogoGlobal(productos) {
-  const porId = new Map();
-  for (const p of (Array.isArray(productos) ? productos : [])) {
-    const lista = (Array.isArray(p?.ingredientes_base) && p.ingredientes_base.length)
-      ? p.ingredientes_base : (Array.isArray(p?.ingredientes) ? p.ingredientes : []);
-    for (const ing of lista) {
-      if (!ing || !ing.id || porId.has(ing.id)) continue;
-      porId.set(ing.id, {
-        id: ing.id,
-        nombre: ing.nombre || ing.id,
-        emoji: ing.emoji,
-        familia: ing.familia || ing.tipo,
-        precio_extra: ing.precio_extra,
-        disponible: ing.disponible
-      });
-    }
-  }
-  // Un extra que la carta DECLARA también es catálogo aunque no esté en la lista de ingredientes de
-  // ningún producto (pasa: la carta declara «Ternera» como añadible sin que figure en ninguna ficha).
-  // Sin esto, la lista ancha de pizzas perdería justo los extras que el dueño ya había puesto.
-  for (const p of (Array.isArray(productos) ? productos : [])) {
-    for (const o of (p?.opciones || [])) {
-      if (!o || o.modo !== 'ELEGIR_VARIOS') continue;
-      for (const v of (o.valores || [])) {
-        if (!v || !v.id || porId.has(v.id)) continue;
-        porId.set(v.id, {
-          id: v.id,
-          nombre: v.etiqueta || v.id,
-          emoji: v.emoji,
-          familia: null,
-          precio_extra: (Number(v.delta_precio_centimos) || 0) / 100,
-          disponible: v.disponible
-        });
-      }
-    }
-  }
-  return [...porId.values()];
-}
-
-// Precios YA declarados por la carta para cada extra (id → céntimos). Es GLOBAL a la carta: el mismo
-// ingrediente vale lo mismo en todas las categorías (verificado en v136: 25 ids, sin conflictos).
-// Se usa para que la lista ancha de pizzas no re-precie lo que el dueño ya había puesto.
-function _deltasDeclarados(productos) {
-  const porId = new Map();
-  for (const p of (Array.isArray(productos) ? productos : [])) {
-    for (const o of (p?.opciones || [])) {
-      if (!o || o.modo !== 'ELEGIR_VARIOS') continue;
-      for (const v of (o.valores || [])) {
-        if (!v || !v.id || porId.has(String(v.id))) continue;
-        porId.set(String(v.id), Number(v.delta_precio_centimos) || 0);
-      }
-    }
-  }
-  return porId;
-}
-
-// ¿La categoría es de pizza? La MISMA puerta que enciende «Crea tu pizza» y el «Añadir extras» de
-// la carta digital (isPizzaCat): la carta la declara con tipo 'pizzas', o su id/nombre es de pizza.
-// Sin este gate el catálogo entero se ofrecería también dentro de un bocadillo o una bebida.
-function _esCategoriaDePizza(catId, categorias) {
-  const cat = String(catId || '');
-  if (!cat) return false;
-  const declarada = (Array.isArray(categorias) ? categorias : []).find(c => c && c.id === catId);
-  if (declarada) {
-    if (String(declarada.tipo || '').toLowerCase() === 'pizzas') return true;
-    return /pizz/i.test(String(declarada.id || '') + ' ' + String(declarada.nombre || ''));
-  }
-  return /pizz/i.test(cat);
+  const paletas = new Map();
+  for (const [fam, m] of porFam) paletas.set(fam, [...m.values()]);
+  return { paletas, familiaDe };
 }
 
 class VariacionesModule extends BaseModule {
   constructor() {
     super();
     this.name = 'variaciones';
-    this.version = '4.7.0';
+    this.version = '4.8.0';
 
     // Dependencias (inyectadas en onLoad)
     this.uiHandler = null;
@@ -223,102 +157,18 @@ class VariacionesModule extends BaseModule {
 
   // Configura (o reconfigura) un producto desde su forma de carta. Fuente ÚNICA de la
   // lógica; la usan onCartaActualizada (flujo nuevo) y onProductoCreado (legacy).
-  _configurar(producto_id, { categoria, precio, variaciones, ingredientes_base, ingredientes, opciones, paleta, paletaGlobal, deltasDeclarados, catPizza }) {
+  _configurar(producto_id, { categoria, precio, variaciones, ingredientes_base, ingredientes, opciones, paleta }) {
     if (!producto_id) return;
     const v = variaciones || {};
     const max = v.max_ingredientes_extra || 10;
     const declaradas = (Array.isArray(opciones) && opciones.length) ? opciones : null;
     const propios = (Array.isArray(ingredientes_base) && ingredientes_base.length)
       ? ingredientes_base : (Array.isArray(ingredientes) ? ingredientes : []);
-    const propiosIds = new Set(propios.map(i => (typeof i === 'string' ? i : i && i.id)).filter(Boolean));
-    // Subsistema Opciones: usa las opciones que trae la carta; si no, las DERIVA (QUITAR los propios +
-    // ELEGIR_VARIOS la paleta de su categoría). El frontend pinta por modo; el motor valida/precia.
-    let ops;
-    if (catPizza && Array.isArray(paletaGlobal) && paletaGlobal.length) {
-      // CATEGORÍA DE PIZZA — «Añadir» ofrece TODO el catálogo (la misma lista que la carta digital,
-      // orden del dueño 2026-10-28), no solo los ingredientes de la familia. El QUITAR se respeta
-      // tal cual lo declara la carta (y si no lo declara, se derivan los propios ingredientes).
-      // El precio de cada extra: el que la carta YA declara si existe —no se re-precian los
-      // existentes— y, para los que nadie había declarado, su precio_extra del catálogo (el mismo
-      // que el pedido-tasador cobra y que la carta digital enseña).
-      const deltaDeclarado = (deltasDeclarados instanceof Map) ? deltasDeclarados : new Map();
-      let maxDeclarado = null;
-      for (const o of (declaradas || [])) {
-        if (o && o.modo === 'ELEGIR_VARIOS' && Number.isInteger(o.max)) maxDeclarado = o.max;
-      }
-      const quitar = (declaradas || []).filter(o => o && o.modo === 'QUITAR');
-      if (!quitar.length && propios.length) {
-        quitar.push({
-          id: 'sin', etiqueta: 'Sin', modo: 'QUITAR',
-          valores: propios.filter(i => i && i.id).map(i => ({
-            id: String(i.id), etiqueta: i.nombre || String(i.id),
-            ...(i.emoji ? { emoji: i.emoji } : {}), delta_precio_centimos: 0
-          }))
-        });
-      }
-      // Un ingrediente que el producto YA lleva (por sus ingredientes o por el QUITAR que declara la
-      // carta) no es un extra: en la carta hay fichas que declaran en QUITAR un ingrediente que su
-      // lista de ingredientes no repite (Mahón: mozzarella). Sin esto se ofrecería «añadir» lo mismo
-      // que se puede quitar.
-      const quitarIds = new Set();
-      for (const o of quitar) for (const v of (o.valores || [])) if (v && v.id) quitarIds.add(String(v.id));
-      const valores = [];
-      const yaPuestos = new Set();
-      const noEsExtra = (id) => propiosIds.has(id) || quitarIds.has(id);
-      // 1) Lo que la carta YA declara se conserva (etiqueta, emoji y precio incluidos): el catálogo
-      //    AMPLÍA la lista, nunca la encoge. Sin esto, una carta cuyo catálogo proyectado no trae lo
-      //    declarado perdería sus extras.
-      for (const o of (declaradas || [])) {
-        if (!o || o.modo !== 'ELEGIR_VARIOS') continue;
-        for (const val of (o.valores || [])) {
-          if (!val || !val.id) continue;
-          const id = String(val.id);
-          if (noEsExtra(id) || yaPuestos.has(id)) continue;
-          yaPuestos.add(id);
-          valores.push({
-            id,
-            etiqueta: val.etiqueta || id,
-            ...(val.emoji ? { emoji: val.emoji } : {}),
-            ref: id,
-            delta_precio_centimos: Number(val.delta_precio_centimos) || 0,
-            ...(val.disponible === false ? { disponible: false } : {})
-          });
-        }
-      }
-      // 2) Y se completa con TODO el catálogo: los ingredientes que nadie había declarado entran con
-      //    su precio_extra (el que la carta digital enseña y el que el pedido-tasador cobra).
-      for (const p of paletaGlobal) {
-        if (!p || !p.id) continue;
-        const id = String(p.id);
-        if (noEsExtra(id) || yaPuestos.has(id)) continue;
-        yaPuestos.add(id);
-        valores.push({
-          id,
-          etiqueta: p.nombre || id,
-          ...(p.emoji ? { emoji: p.emoji } : {}),
-          ref: id,
-          delta_precio_centimos: deltaDeclarado.has(id)
-            ? deltaDeclarado.get(id)
-            : Math.round((Number(p.precio_extra) || 0) * 100),
-          ...(p.disponible === false ? { disponible: false } : {})
-        });
-      }
-      ops = [...quitar];
-      if (valores.length) {
-        ops.push({
-          id: 'anadir', etiqueta: 'Añadir', modo: 'ELEGIR_VARIOS', min: 0,
-          max: maxDeclarado != null ? maxDeclarado : max, valores
-        });
-      }
-      // Cualquier otra opción declarada (modos futuros) se conserva tal cual.
-      for (const o of (declaradas || [])) {
-        if (o && o.modo && o.modo !== 'QUITAR' && o.modo !== 'ELEGIR_VARIOS') ops.push(o);
-      }
-    } else {
-      ops = declaradas || derivarOpciones(
-        { ingredientes: propios }, paleta || [], { maxExtras: max }
-      );
-    }
+    // Subsistema Opciones: manda lo que DECLARA la carta. Si aún no lo declara, se deriva con la
+    // paleta de su FAMILIA (categorias[].tipo) — nunca con un catálogo inventado aquí.
+    const ops = declaradas || derivarOpciones(
+      { ingredientes: propios }, paleta || [], { maxExtras: max }
+    );
     const maxOpciones = (() => {
       // El máximo que MANDA es el declarado en las opciones de la carta: es lo que el panel pinta
       // y lo que el camarero/cliente ve. `variaciones.max_ingredientes_extra` es la forma vieja
@@ -345,13 +195,11 @@ class VariacionesModule extends BaseModule {
   }
 
   // Configura una lista de productos proyectados (misma forma de carta). Devuelve cuántos.
-  // `categorias` (opcional) es la lista de la carta: con ella se resuelve la puerta de pizza
-  // (tipo 'pizzas' / nombre o id de pizza). Sin ella, la puerta cae al id de la categoría.
+  // `categorias` es la lista de la carta: de su `tipo` sale la FAMILIA, y de la familia la paleta
+  // común de «Añadir». Sin categorías, cada una cae a su propio id (no se inventa nada).
   _configurarLista(productos, { categorias } = {}) {
     if (!Array.isArray(productos)) return 0;
-    const paletas = _paletasPorCategoria({ productos });
-    const paletaGlobal = _catalogoGlobal(productos);
-    const deltasDeclarados = _deltasDeclarados(productos);
+    const { paletas, familiaDe } = _paletasPorFamilia({ categorias, productos });
     for (const p of productos) {
       if (!p || !p.id) continue;
       const cat = p.categoria_id || p.categoria;
@@ -362,10 +210,7 @@ class VariacionesModule extends BaseModule {
         ingredientes_base: p.ingredientes_base,
         ingredientes: p.ingredientes,
         opciones: p.opciones,
-        paleta: paletas.get(cat) || [],
-        paletaGlobal,
-        deltasDeclarados,
-        catPizza: _esCategoriaDePizza(cat, categorias)
+        paleta: paletas.get(familiaDe.get(cat) || cat) || []
       });
     }
     this.metrics?.gauge?.('variacion.productos_configurados.count', this.configuraciones.size);

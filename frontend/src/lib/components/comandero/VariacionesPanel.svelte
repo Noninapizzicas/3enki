@@ -1,15 +1,18 @@
 <script lang="ts">
   /**
-   * VariacionesPanel v3.0 — Personalizar producto por ingredientes de su grupo
+   * VariacionesPanel v3.1 — Personalizar producto por ingredientes
    *
    * Estructura:
    *   1. Arriba: ingredientes del producto (tap = rojo para quitar)
-   *   2. Abajo: ingredientes del mismo GRUPO organizados por TIPO con colores
+   *   2. Abajo: ingredientes para AÑADIR organizados por TIPO con colores
    *
    * Reglas:
    *   - Solo se pueden quitar ingredientes que lleva el producto
-   *   - Solo se pueden añadir ingredientes del mismo grupo (categoría)
-   *   - Los ingredientes de otro grupo NO aparecen
+   *   - El «Añadir» lo manda el BACKEND (`opciones` de variaciones → subsistema Opciones):
+   *     en las categorías de pizza ofrece TODO el catálogo, igual que la carta digital;
+   *     en el resto, la paleta de su familia/categoría.
+   *   - La rama legacy (sin `opciones`, cuando variaciones no responde) mantiene el filtro
+   *     por familia como degradación honesta.
    */
   import { createEventDispatcher, onMount } from 'svelte';
   import { mqttRequest } from '$lib/ui-core/mqtt-request';
@@ -131,7 +134,10 @@
 
     try {
       // Config del backend — ahora trae `opciones` (subsistema Opciones). Soft-fail.
-      const varRes = await mqttRequest('variaciones', 'get', { producto_id: producto.id }).catch(() => null);
+      // project_id EN LA LLAMADA: sin él, con la caché del módulo fría (tras un reinicio) el 404
+      // mandaba el panel a la rama legacy, que filtra por familia y enseñaba solo los ingredientes
+      // de la categoría del producto. Con él, el módulo auto-vivifica desde la carta y responde.
+      const varRes = await mqttRequest('variaciones', 'get', { producto_id: producto.id, project_id: projectId }).catch(() => null);
       const varData = varRes?.data;
       const opciones: any[] | null = Array.isArray(varData?.opciones) ? varData.opciones : null;
 

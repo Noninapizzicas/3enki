@@ -16,7 +16,7 @@ fuentes:
   - modules/pizzepos/tarifas/**
   - modules/pizzepos/persistencia-comandero/**
   - modules/pizzepos/impresion/**
-verificado: 2026-11-10 (confirmacion-pedido v1.2: la espera tiene DOS tramos — a los 10 min un último mensaje amable «¿serías tan amable de confirmarnos el pedido?» y otros 10 min después se retira; la respuesta del cliente se acepta en los DOS shapes del bus —el de whatsapp-bot (`from`/`text`/`project_slug`) y el del puente Rust (`de`/`texto`/`slug`/`id`), sin el cual el «sí» se ignoraba en silencio—; pedidos retira pedido Y cuenta con `_retirarPedido` (también en el NO), notificador avisa a la barra con el mismo `pedido.sin_confirmar`) · 2026-11-10 (el segundo mensaje pide la confirmación con amabilidad) · 2026-11-07 (ubicación del cliente: pin opcional en el #P1, mapa del reparto al staff) · 2026-11-06 (entrega a domicilio: el modo 'domicilio' existe como MODO, no como canal — cuentas lo canoniza a 'llevar' para que nazca ticket que se cierra al cobrar y no cuenta huérfana; pedidos exige direccion_entrega y cliente_telefono en la puerta (400 sin ellos) y el comandero acepta notas_generales por parámetro para que el destino se imprima en el ticket de cocina)
+verificado: 2026-11-17 (variaciones v4.7.0: en las categorías de pizza el «Añadir» del comandero ofrece TODO el catálogo —la misma lista que la carta digital— y no solo la familia; El Fardel, Las Calas y Bebidas intactas; el mapa de precios del comandero se amplía con los mismos ingredientes para que panel y tasador cobren igual; además, el frontend volvía a compilar —el `$:` duplicado de `hasIngredientesBase` en cocina/ItemLine rompía el build y el POS servía bundle viejo) · 2026-11-10 (confirmacion-pedido v1.2: la espera tiene DOS tramos — a los 10 min un último mensaje amable «¿serías tan amable de confirmarnos el pedido?» y otros 10 min después se retira; la respuesta del cliente se acepta en los DOS shapes del bus —el de whatsapp-bot (`from`/`text`/`project_slug`) y el del puente Rust (`de`/`texto`/`slug`/`id`), sin el cual el «sí» se ignoraba en silencio—; pedidos retira pedido Y cuenta con `_retirarPedido` (también en el NO), notificador avisa a la barra con el mismo `pedido.sin_confirmar`) · 2026-11-10 (el segundo mensaje pide la confirmación con amabilidad) · 2026-11-07 (ubicación del cliente: pin opcional en el #P1, mapa del reparto al staff) · 2026-11-06 (entrega a domicilio: el modo 'domicilio' existe como MODO, no como canal — cuentas lo canoniza a 'llevar' para que nazca ticket que se cierra al cobrar y no cuenta huérfana; pedidos exige direccion_entrega y cliente_telefono en la puerta (400 sin ellos) y el comandero acepta notas_generales por parámetro para que el destino se imprima en el ticket de cocina)
 ---
 
 # PizzePOS Módulos — Subsistema de Punto de Venta (v3.2.0)
@@ -725,7 +725,7 @@ CLASE Ingrediente {
 }
 ```
 
-### 8. VARIACIONES (v4.6.1) — Reglas por producto, leídas de la CARTA
+### 8. VARIACIONES (v4.7.0) — Reglas por producto, leídas de la CARTA
 
 > **Lo REAL (verificado en vivo 2026-10-20).** El módulo NO es CRUD de "variaciones" ni guarda
 > `variacionesPerProducto`: es una **caché de reglas por producto** alimentada por la carta.
@@ -748,6 +748,22 @@ CLASE Ingrediente {
 > el 10 de la carta: el motor rechazaba el 6º extra que la carta sí permite. El campo viejo queda solo
 > como respaldo cuando la carta no declara opciones (derivadas).
 
+> **LA LISTA ANCHA EN LAS CATEGORÍAS DE PIZZA (v4.7.0, orden del dueño 2026-11-17).** El «Añadir»
+> del comandero ofrecía solo los ingredientes de la familia del producto (filtro por `grupos` en el
+> panel, derivado de la paleta de la categoría). Dueño: *«en La Flota y en Puerto Seguro debe enseñar
+> todos los ingredientes, como la carta digital; de momento solo en esas dos»*. Ahora, cuando la
+> categoría es de pizza —la MISMA puerta que enciende «Crea tu pizza» (`isPizzaCat`: `tipo: 'pizzas'`
+> o id/nombre con raíz *pizz*)— `_configurar` completa `ELEGIR_VARIOS` con el **catálogo entero**
+> (unión de ingredientes de toda la carta + extras ya declarados) menos lo que el producto ya lleva.
+> Precio de cada extra: el que la carta YA declara (no se re-precian los existentes) y, para los que
+> nadie había declarado, su `precio_extra` del catálogo. En el resto de categorías (El Fardel, Las
+> Calas, Bebidas) las opciones quedan **intactas**. `_configurarLista` recibe `{categorias}` para
+> resolver la puerta; sin ellas cae al id de la categoría.
+>
+> El gemelo del cobro: `comandero._extrasDeCarta` amplía su mapa de precios con los mismos
+> ingredientes no declarados (mismo precio), así el panel y el tasador ven **el mismo número** — sin
+> esto el tasador marcaba `EXTRA_DESCONOCIDO` y cobraba 0 por un extra que el panel pintaba con precio.
+
 ```
 CLASE VariacionesModule HEREDA BaseModule {
   ATRIBUTOS {
@@ -758,8 +774,10 @@ CLASE VariacionesModule HEREDA BaseModule {
   }
 
   METODOS {
-    _configurar(producto_id, {categoria, precio, variaciones, ingredientes_base, opciones, paleta})
-      opciones = las de la CARTA si las trae; si no, derivarOpciones(QUITAR propios + ELEGIR_VARIOS paleta de su categoría)
+    _configurar(producto_id, {categoria, precio, variaciones, ingredientes_base, opciones, paleta,
+                              paletaGlobal, deltasDeclarados, catPizza})
+      catPizza (categoría de pizza): ELEGIR_VARIOS = lo declarado + TODO el catálogo (menos lo propio)
+      resto: opciones = las de la CARTA si las trae; si no, derivarOpciones(QUITAR propios + ELEGIR_VARIOS paleta de su categoría)
       max_ingredientes_extra = opciones.ELEGIR_VARIOS.max  ??  variaciones.max_ingredientes_extra  ??  5
 
     _configDeProducto(producto_id, project_id)          // el acto crea el estado
@@ -767,7 +785,7 @@ CLASE VariacionesModule HEREDA BaseModule {
       SIN project_id: devuelve null (el 404 de siempre)
 
     _asegurarProyecto(project_id)                       // hidrata ESE proyecto desde la fuente
-      productos.carta_completa(project_id) → _configurarLista(productos)
+      productos.carta_completa(project_id) → _configurarLista(productos, {categorias})
       concurrentes del mismo proyecto comparten el viaje
 
     handleGetVariacionesProducto({producto_id, project_id?})   → 200 {opciones, precio_base_centimos, ...}

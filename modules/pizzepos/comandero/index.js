@@ -35,7 +35,7 @@ class ComanderoModule extends BaseModule {
   constructor() {
     super();
     this.name    = 'comandero';
-    this.version = '3.6.1';
+    this.version = '3.6.2';
     this.validator = null;
 
     this.pedidos              = new Map();
@@ -1091,6 +1091,7 @@ class ComanderoModule extends BaseModule {
    */
   _extrasDeCarta(productos) {
     const porId = new Map();
+    // 1) Lo DECLARADO en la carta manda: su delta es el precio y no se re-precio nunca.
     for (const p of (productos || [])) {
       for (const o of (p?.opciones || [])) {
         if (o?.modo !== 'ELEGIR_VARIOS') continue;
@@ -1104,6 +1105,24 @@ class ComanderoModule extends BaseModule {
             precio_extra: (Number(v.delta_precio_centimos) || 0) / 100
           });
         }
+      }
+    }
+    // 2) Los ingredientes del catálogo que NADIE había declarado (el hueco del 2026-10-28: la carta
+    // digital ofrece todos los extras, pero los no declarados no estaban en el mapa y el tasador los
+    // cobraba a 0 con aviso EXTRA_DESCONOCIDO). Se tasan por su precio_extra del catálogo —el mismo
+    // que la carta digital enseña y que el panel del comandero pinta—. Lo declarado arriba no se toca.
+    for (const p of (productos || [])) {
+      const lista = (Array.isArray(p?.ingredientes_base) && p.ingredientes_base.length)
+        ? p.ingredientes_base : (Array.isArray(p?.ingredientes) ? p.ingredientes : []);
+      for (const ing of lista) {
+        if (!ing || !ing.id) continue;
+        const id = String(ing.id);
+        if (porId.has(id)) continue;
+        porId.set(id, {
+          id,
+          nombre: ing.nombre || id,
+          precio_extra: Number(ing.precio_extra) || 0
+        });
       }
     }
     return Array.from(porId.values());

@@ -49,7 +49,7 @@ class MenuGeneratorReflejo extends ModuloHibridoReflejo {
   constructor() {
     super();
     this.name = 'menu-generator';
-    this.version = 'reflejo-1.1.0';
+    this.version = 'reflejo-1.2.0';
   }
 
   // ── handler RPC (una línea: delega a _atender de la base) ──
@@ -191,6 +191,9 @@ class MenuGeneratorReflejo extends ModuloHibridoReflejo {
         };
         // estaciones viven en la categoría; el producto las hereda (proyector productos).
         if (c && Array.isArray(c.estaciones) && c.estaciones.length) cat.estaciones = c.estaciones;
+        // FAMILIA canónica (tipo): agrupa subfamilias ('pizzas' = La Flota + Puerto Seguro) y de
+        // ella sale la paleta común de «Añadir». Dato de carta: aquí se PRESERVA, nunca se pierde.
+        if (c && c.tipo) cat.tipo = slug(c.tipo);
         if (c && c.activa !== undefined) cat.activa = !!c.activa;
         return cat;
       })
@@ -239,18 +242,23 @@ class MenuGeneratorReflejo extends ModuloHibridoReflejo {
     }
 
     // Subsistema Opciones: cada producto NACE con sus opciones (QUITAR sus ingredientes +
-    // ELEGIR_VARIOS la paleta de su categoría: unión de los ingredientes de esa categoría menos
-    // lo propio). El comandero/carta-digital las pintan por modo; variaciones ya no deriva al vuelo.
+    // ELEGIR_VARIOS la paleta de su FAMILIA: categorias[].tipo, unión de los ingredientes de todas
+    // las categorías de esa familia — 'pizzas' = La Flota + Puerto Seguro — menos lo propio).
+    // La familia es DATO de la carta; una categoría sin familia cae a su propio id.
+    const familiaDe = new Map();
+    for (const c of categorias) if (c && c.id) familiaDe.set(c.id, c.tipo || c.id);
     const paletas = new Map();
     for (const prod of productos) {
-      if (!paletas.has(prod.categoria_id)) paletas.set(prod.categoria_id, new Map());
-      const m = paletas.get(prod.categoria_id);
+      const fam = familiaDe.get(prod.categoria_id) || prod.categoria_id;
+      if (!paletas.has(fam)) paletas.set(fam, new Map());
+      const m = paletas.get(fam);
       for (const ing of (prod.ingredientes || [])) {
         if (ing && ing.id && !m.has(ing.id)) m.set(ing.id, ing);
       }
     }
     for (const prod of productos) {
-      const paleta = [...(paletas.get(prod.categoria_id) || new Map()).values()];
+      const fam = familiaDe.get(prod.categoria_id) || prod.categoria_id;
+      const paleta = [...(paletas.get(fam) || new Map()).values()];
       const ops = derivarOpciones(prod, paleta);
       if (ops.length) prod.opciones = ops;
     }

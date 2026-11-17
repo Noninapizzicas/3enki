@@ -28,12 +28,14 @@ const FAMILIAS = new Set(['queso', 'verdura', 'carne', 'salsa', 'pescado', 'frut
 // € de extra estándar si la fuente no trae precio propio (misma ley que menu-generator). El comandero
 // lo necesita para cobrar extras (ELEGIR_VARIOS); 0 explícito = gratis (se respeta).
 const PRECIO_EXTRA_ESTANDAR = 0.5;
+// Modos del subsistema Opciones (motor-opciones): la carta es la ÚNICA que escribe `opciones`.
+const { MODOS: MODOS_OPCION } = require('../../_shared/motor-opciones');
 
 class CartaManagerReflejo extends ModuloHibridoReflejo {
   constructor() {
     super();
     this.name = 'carta-manager';
-    this.version = 'reflejo-1.16.0';
+    this.version = 'reflejo-1.17.0';
   }
 
   // ── handlers RPC (una linea) ──
@@ -46,6 +48,7 @@ class CartaManagerReflejo extends ModuloHibridoReflejo {
   onUpdateProductRequest(e) { return this._atender(e, 'update_product', 'carta.update_product.response', d => this._updateProduct(d)); }
   onUpdateProductsRequest(e) { return this._atender(e, 'update_products', 'carta.update_products.response', d => this._updateProducts(d)); }
   onAddCategoryRequest(e) { return this._atender(e, 'add_category', 'carta.add_category.response', d => this._addCategory(d)); }
+  onUpdateCategoryRequest(e) { return this._atender(e, 'update_category', 'carta.update_category.response', d => this._updateCategory(d)); }
   onRemoveCategoryRequest(e) { return this._atender(e, 'remove_category', 'carta.remove_category.response', d => this._removeCategory(d)); }
   onUpdatePricesRequest(e) { return this._atender(e, 'update_prices', 'carta.update_prices.response', d => this._updatePrices(d)); }
   onUpdateExtrasRequest(e) { return this._atender(e, 'update_extras', 'carta.update_extras.response', d => this._updateExtras(d)); }
@@ -543,6 +546,46 @@ class CartaManagerReflejo extends ModuloHibridoReflejo {
     return Object.keys(out).length ? out : undefined;
   }
 
+  // OPCIONES (subsistema Opciones) a forma CANÓNICA. La carta es el ÚNICO sitio donde se
+  // declaran; comandero, carta digital y variaciones las LEEN. Se valida contra motor-opciones:
+  // modo conocido, cada valor con id propio, dinero en CÉNTIMOS enteros.
+  // Devuelve { opciones } o { error } — una opción inválida se rechaza, no se escribe a medias.
+  _normalizarOpciones(ops) {
+    if (!Array.isArray(ops)) return { error: 'opciones debe ser un array' };
+    const out = [];
+    for (const o of ops) {
+      if (!o || typeof o !== 'object') return { error: 'opción no es objeto' };
+      const modo = String(o.modo || '').toUpperCase();
+      if (!MODOS_OPCION.includes(modo)) return { error: `modo desconocido: ${o.modo}` };
+      const opId = slug(o.id || o.etiqueta);
+      if (!opId) return { error: 'opción sin id ni etiqueta' };
+      const valores = [];
+      const vistos = new Set();
+      for (const v of (Array.isArray(o.valores) ? o.valores : [])) {
+        if (!v) continue;
+        const vid = String(v.id || v.ref || '').trim();
+        if (!vid || vistos.has(vid)) continue;
+        vistos.add(vid);
+        let delta = 0;
+        if (Number.isInteger(v.delta_precio_centimos)) delta = v.delta_precio_centimos;
+        else if (typeof v.delta_precio === 'number') delta = Math.round(v.delta_precio * 100);
+        else if (typeof v.precio_extra === 'number') delta = Math.round(v.precio_extra * 100);
+        const val = { id: vid, etiqueta: String(v.etiqueta || v.nombre || vid), delta_precio_centimos: delta };
+        if (v.emoji) val.emoji = String(v.emoji);
+        if (v.ref) val.ref = String(v.ref);
+        if (v.disponible === false) val.disponible = false;
+        valores.push(val);
+      }
+      if (!valores.length) return { error: `opción «${opId}» sin valores` };
+      const op = { id: opId, etiqueta: String(o.etiqueta || opId), modo, valores };
+      if (o.requerido !== undefined) op.requerido = !!o.requerido;
+      if (Number.isInteger(o.min)) op.min = o.min;
+      if (Number.isInteger(o.max)) op.max = o.max;
+      out.push(op);
+    }
+    return { opciones: out };
+  }
+
   async _addProduct(input) {
     if (!input.project_id || !input.carta_id) return this._invalid('carta_id');
     const p = input.producto || {};
@@ -623,6 +666,14 @@ class CartaManagerReflejo extends ModuloHibridoReflejo {
     if (campos.ingredientes_base !== undefined) prod.ingredientes_base = this._normalizarIngredientes(campos.ingredientes_base);
     if (campos.dietas !== undefined) { const dn = this._normalizarDietas(campos.dietas); if (dn) prod.dietas = dn; }
     if (campos.variaciones !== undefined) { const vn = this._normalizarVariaciones(campos.variaciones); if (vn) prod.variaciones = vn; }
+    // OPCIONES: campo de primera clase de la carta (subsistema Opciones). Antes se descartaba
+    // EN SILENCIO al actualizar — sólo el alta podía fijarlas, así que la paleta de un producto
+    // quedaba congelada para siempre. Array vacío = el producto no ofrece opciones.
+    if (campos.opciones !== undefined) {
+      const on = this._normalizarOpciones(campos.opciones);
+      if (on.error) return this._errorResponse(422, 'INVALID_INPUT', `opciones: ${on.error}`);
+      if (on.opciones.length) prod.opciones = on.opciones; else delete prod.opciones;
+    }
     return null;
   }
 
@@ -673,7 +724,36 @@ class CartaManagerReflejo extends ModuloHibridoReflejo {
       carta.categorias = carta.categorias || [];
       if (carta.categorias.some(c => c.id === id)) return { error: this._errorResponse(409, 'ALREADY_EXISTS', 'categoria ya existe', { entity_type: 'categoria', id }) };
       nueva = { id, nombre: String(cat.nombre).trim(), descripcion: cat.descripcion || null, orden: typeof cat.orden === 'number' ? cat.orden : carta.categorias.length };
+      // FAMILIA canónica (tipo): agrupa subfamilias — 'pizzas' = La Flota + Puerto Seguro,
+      // 'bocatas' = El Fardel. De ella sale la paleta común de «Añadir». Slug, nunca texto libre.
+      const tipo = slug(cat.tipo);
+      if (tipo) nueva.tipo = tipo;
       return { status: 201, patches: [{ op: 'add', path: '/categorias/-', value: nueva }], data: (c) => ({ categoria: nueva, carta_version: c.meta.version }) };
+    });
+  }
+
+  // update_category — corrige una categoría sin borrarla (borrar exige mover sus productos).
+  // `tipo` es la FAMILIA canónica de la carta: dato que agrupa subfamilias y del que sale la
+  // paleta común de «Añadir». '' lo BORRA (la categoría deja de pertenecer a ninguna familia).
+  async _updateCategory(input) {
+    if (!input.project_id || !input.carta_id || !input.categoria_id) return this._invalid('categoria_id');
+    const campos = input.campos || input.categoria || {};
+    if (!['nombre', 'descripcion', 'orden', 'tipo'].some(k => campos[k] !== undefined)) return this._invalid('campos');
+    return this._mutar(input, 'update_category', (carta) => {
+      const cat = (carta.categorias || []).find(c => c.id === input.categoria_id);
+      if (!cat) return { error: this._errorResponse(404, 'RESOURCE_NOT_FOUND', 'categoria no existe', { entity_type: 'categoria', id: input.categoria_id }) };
+      if (campos.nombre !== undefined) {
+        const nombre = String(campos.nombre).trim();
+        if (!nombre) return { error: this._errorResponse(422, 'INVALID_INPUT', 'categoria.nombre vacio') };
+        cat.nombre = nombre;
+      }
+      if (campos.descripcion !== undefined) cat.descripcion = campos.descripcion || null;
+      if (Number.isInteger(campos.orden)) cat.orden = campos.orden;
+      if (campos.tipo !== undefined) {
+        const tipo = slug(campos.tipo);
+        if (tipo) cat.tipo = tipo; else delete cat.tipo;
+      }
+      return { patches: [{ op: 'replace', path: '/categorias', value: carta.categorias }], data: (c) => ({ categoria: cat, categoria_id: cat.id, carta_version: c.meta.version }) };
     });
   }
 

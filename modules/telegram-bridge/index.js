@@ -209,12 +209,14 @@ class TelegramBridgeModule extends ModuloHibridoReflejo {
     // o `sizes[].file_id`. Buscarlo en todas sus formas antes de rendirse.
     const fileId = this._extraerFileId(d);
     const pie = typeof caption === 'string' && caption.trim() ? caption.trim() : null;
-    const ruta = await this._descargarFoto(botName, fileId);
+    // La descarga DEVUELVE el motivo, no solo null: sin él, el aviso del chat
+    // decía "no se pudo descargar" y no había forma de saber por qué.
+    const { ruta, motivo } = await this._descargarFoto(botName, fileId);
 
     const cabeza = pie ? `[foto] ${pie}` : '[foto recibida sin pie de foto]';
     const texto = ruta
       ? `${cabeza}\narchivo: ${ruta}`
-      : `${cabeza}\n(no se pudo descargar la foto · ${this._motivoSinFoto(d, fileId)})`;
+      : `${cabeza}\n(no se pudo descargar la foto · ${motivo || this._motivoSinFoto(d, fileId)})`;
 
     await this._reenviarAlChat({ botName, chatId, from: d.from }, texto);
     this.metrics?.increment('telegram-bridge.entrante.foto_reenviada');
@@ -259,24 +261,46 @@ class TelegramBridgeModule extends ModuloHibridoReflejo {
    * igual, con el aviso: mejor una foto sin ruta que un silencio).
    */
   async _descargarFoto(botName, fileId) {
-    if (!fileId) return null;
+    if (!fileId) return { ruta: null, motivo: 'sin fileId' };
     // Nombre propio y fechado: el chat puede citar la ruta tal cual.
     const sello = new Date().toISOString().replace(/[-:]/g, '').replace(/\..*$/, ''); // 20261027T134814
     const cola = String(fileId).replace(/[^\w-]/g, '').slice(-8);
     const destPath = path.join(this.botsPath, botName, 'received', `foto_${sello}_${cola}.jpg`);
 
-    const res = await this._rpc(
-      'telegram.get_file.request',
-      { botName, fileId, download: true, destPath },
-      { timeout_ms: 30000 }
-    );
-    if (!res || res.status !== 200) {
-      this.logger?.error('telegram-bridge.foto.descarga_fallo', {
-        botName, fileId, error: res && (res.error?.message || res.error)
-      });
-      return null;
+    // TRES INTENTOS CON ESPERA CRECIENTE. Un fallo aquí es casi siempre
+    // transitorio (timeout del RPC, el servicio ocupado, un 429 de Telegram) y
+    // antes se rendía al primero: la foto se perdía y el chat recibía "no se
+    // pudo descargar" sin motivo. La descarga es idempotente —mismo fileId,
+    // mismo destPath—, así que reintentar no duplica nada.
+    let ultimo = null;
+    for (let intento = 1; intento <= 3; intento++) {
+      if (intento > 1) {
+        await new Promise((r) => setTimeout(r, intento === 2 ? 1000 : 3000));
+      }
+      try {
+        const res = await this._rpc(
+          'telegram.get_file.request',
+          { botName, fileId, download: true, destPath },
+          { timeout_ms: 30000 }
+        );
+        if (res && res.status === 200) {
+          const local = (res.data && res.data.localPath) || destPath;
+          if (intento > 1) {
+            this.logger?.info('telegram-bridge.foto.descarga_reintentada', { botName, intento });
+          }
+          return { ruta: local, motivo: null };
+        }
+        ultimo = (res && (res.error?.message || res.error)) || `status ${res && res.status}`;
+      } catch (err) {
+        ultimo = err.message;
+      }
+      this.logger?.warn('telegram-bridge.foto.intento_fallido', { botName, intento, error: ultimo });
     }
-    return (res.data && res.data.localPath) || null;
+
+    this.logger?.error('telegram-bridge.foto.descarga_fallo', {
+      botName, fileId, intentos: 3, error: ultimo
+    });
+    return { ruta: null, motivo: `tras 3 intentos: ${ultimo}` };
   }
 
   async onTelegramCallbackReceived(event) {

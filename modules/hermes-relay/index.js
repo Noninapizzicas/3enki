@@ -131,6 +131,10 @@ class HermesRelayModule extends BaseModule {
     try {
       const history = await this._loadHistory(project_id, conversation_id, settings?.context_window);
       const ctx = { project_id, conversation_id, page_id, page_context };
+      // El prompt de identidad del proyecto/conversación. Se guardaba (tabla
+      // prompts, slot 'system') pero NADIE lo leía: el bot hablaba como un
+      // asistente genérico aunque el dueño hubiera definido su carácter.
+      ctx.prompt_identidad = await this._getPromptIdentidad(project_id, conversation_id);
       const messages = this._formatMessages(history, user_message, ctx);
 
       // El modelo de la CONVERSACIÓN gobierna (chat-io lo manda en `settings`).
@@ -194,6 +198,48 @@ class HermesRelayModule extends BaseModule {
     }
   }
 
+  /**
+   * El prompt de IDENTIDAD de esta conversación (slot 'system').
+   *
+   * Vivía huérfano: prompt-manager lo guardaba en `_prompts/db.sqlite` y la
+   * conversación guardaba su `prompt_id`, pero al construir los mensajes nadie
+   * lo leía. El dueño definía el carácter del bot y el bot seguía respondiendo
+   * como asistente genérico.
+   *
+   * Orden: el de la conversación; si no tiene, el del proyecto.
+   * Se pide por el bus (prompt.get.request) — no se lee la DB a mano.
+   */
+  async _getPromptIdentidad(project_id, conversation_id) {
+    if (!this._rpc) return null;
+    let promptId = null;
+
+    try {
+      const rows = await this._db(project_id,
+        'SELECT prompt_id FROM conversations WHERE id = ?',
+        [conversation_id], true);
+      promptId = (rows && rows[0] && rows[0].prompt_id) || null;
+    } catch (_) {
+      // Conversación sin columna o sin fila: se prueba con el del proyecto.
+    }
+
+    if (!promptId) {
+      const proy = await this._rpc('project.get.request', { id: project_id }, { timeout_ms: 4000 });
+      promptId = (proy && (proy.prompt_id || (proy.project && proy.project.prompt_id)))
+        || null;
+    }
+    if (!promptId) return null;
+
+    const res = await this._rpc('prompt.get.request', { id: promptId }, { timeout_ms: 5000 });
+    const prompt = res && (res.prompt || (res.data && res.data.prompt));
+    const contenido = prompt && prompt.content;
+    if (!contenido || typeof contenido !== 'string' || !contenido.trim()) return null;
+
+    this.logger?.info('hermes-relay.prompt.identidad', {
+      project_id, conversation_id, prompt_id: promptId, chars: contenido.length
+    });
+    return contenido.trim();
+  }
+
   // ── Historial desde SQLite ────────────────────────────────────
 
   async _loadHistory(project_id, conversation_id, contextWindow) {
@@ -210,7 +256,7 @@ class HermesRelayModule extends BaseModule {
   _formatMessages(history, currentUserMessage, ctx) {
     const messages = [];
 
-    const systemMsg = this._buildSystemMessage(ctx);
+    const systemMsg = this._buildSystemMessage(ctx, ctx.prompt_identidad);
     if (systemMsg) {
       messages.push({ role: 'system', content: systemMsg });
     }
@@ -265,8 +311,14 @@ class HermesRelayModule extends BaseModule {
     return this._catalogoCache;
   }
 
-  _buildSystemMessage(ctx) {
+  _buildSystemMessage(ctx, identidad) {
     const sections = [];
+
+    // PRIMERO la identidad: quién es manda sobre cómo opera. Si el proyecto
+    // definió su carácter, va delante del CLAUDE.md y de las reglas.
+    if (identidad) {
+      sections.push(identidad);
+    }
 
     const claudeMd = this._getClaudeMd();
     if (claudeMd) {

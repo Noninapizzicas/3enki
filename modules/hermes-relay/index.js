@@ -116,7 +116,10 @@ class HermesRelayModule extends BaseModule {
       correlation_id, conversation_id, project_id,
       user_id, channel, channel_context,
       message_id, user_message,
-      settings, page_id, page_context, attachments, intencion
+      settings, page_id, page_context, attachments, intencion,
+      // chat-io YA manda el prompt_id de la conversación en este evento.
+      // No hay que ir a la DB a buscarlo: el dato viaja en el turno.
+      prompt_id
     } = data;
 
     if (!project_id || !conversation_id || !user_message) {
@@ -131,10 +134,8 @@ class HermesRelayModule extends BaseModule {
     try {
       const history = await this._loadHistory(project_id, conversation_id, settings?.context_window);
       const ctx = { project_id, conversation_id, page_id, page_context };
-      // El prompt de identidad del proyecto/conversación. Se guardaba (tabla
-      // prompts, slot 'system') pero NADIE lo leía: el bot hablaba como un
-      // asistente genérico aunque el dueño hubiera definido su carácter.
-      ctx.prompt_identidad = await this._getPromptIdentidad(project_id, conversation_id);
+      // El prompt de identidad viene con el turno (prompt_id en el evento).
+      ctx.prompt_identidad = await this._getPromptIdentidad(prompt_id);
       const messages = this._formatMessages(history, user_message, ctx);
 
       // El modelo de la CONVERSACIÓN gobierna (chat-io lo manda en `settings`).
@@ -199,35 +200,19 @@ class HermesRelayModule extends BaseModule {
   }
 
   /**
-   * El prompt de IDENTIDAD de esta conversación (slot 'system').
+   * El contenido del prompt de identidad, a partir del `prompt_id` que YA viene
+   * en el turno.
    *
-   * Vivía huérfano: prompt-manager lo guardaba en `_prompts/db.sqlite` y la
-   * conversación guardaba su `prompt_id`, pero al construir los mensajes nadie
-   * lo leía. El dueño definía el carácter del bot y el bot seguía respondiendo
-   * como asistente genérico.
+   * Acción canónica: `chat-io` es quien conoce la conversación y manda su
+   * `prompt_id` en `chat.message.saved`; aquí solo se RESUELVE ese id con la RPC
+   * que ya existe (`prompt.get`), que es de prompt-manager.
    *
-   * Orden: el de la conversación; si no tiene, el del proyecto.
-   * Se pide por el bus (prompt.get.request) — no se lee la DB a mano.
+   * Sin consultar la DB (el dato viaja en el evento) y sin `project.get`: si el
+   * turno no trae prompt_id, esta conversación no tiene carácter y no se añade
+   * nada. Un relay que va a buscar cosas por su cuenta deja de ser un pipe.
    */
-  async _getPromptIdentidad(project_id, conversation_id) {
-    if (!this._rpc) return null;
-    let promptId = null;
-
-    try {
-      const rows = await this._db(project_id,
-        'SELECT prompt_id FROM conversations WHERE id = ?',
-        [conversation_id], true);
-      promptId = (rows && rows[0] && rows[0].prompt_id) || null;
-    } catch (_) {
-      // Conversación sin columna o sin fila: se prueba con el del proyecto.
-    }
-
-    if (!promptId) {
-      const proy = await this._rpc('project.get.request', { id: project_id }, { timeout_ms: 4000 });
-      promptId = (proy && (proy.prompt_id || (proy.project && proy.project.prompt_id)))
-        || null;
-    }
-    if (!promptId) return null;
+  async _getPromptIdentidad(promptId) {
+    if (!this._rpc || !promptId) return null;
 
     const res = await this._rpc('prompt.get.request', { id: promptId }, { timeout_ms: 5000 });
     const prompt = res && (res.prompt || (res.data && res.data.prompt));
@@ -235,7 +220,7 @@ class HermesRelayModule extends BaseModule {
     if (!contenido || typeof contenido !== 'string' || !contenido.trim()) return null;
 
     this.logger?.info('hermes-relay.prompt.identidad', {
-      project_id, conversation_id, prompt_id: promptId, chars: contenido.length
+      prompt_id: promptId, chars: contenido.length
     });
     return contenido.trim();
   }

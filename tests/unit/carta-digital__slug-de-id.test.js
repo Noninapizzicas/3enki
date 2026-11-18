@@ -1,16 +1,20 @@
 'use strict';
 
 /**
- * carta-digital — EL SLUG DEL BUNDLE NO SE TRUNCA.
+ * carta-digital — EL SLUG ES IDENTIDAD, NO CÁLCULO.
  *
- * El `project_slug` horneado en el bundle es el ancla entre la PWA y el proyecto: el
- * mensaje `PEDIDO <slug>-<nonce>` viaja al ingest, que compara ese slug con el del
- * proyecto y DESCARTA el pedido entero si no coincide ("pedido de otro negocio").
+ * El `project_slug` horneado en el bundle es el ancla entre la PWA y el proyecto: el mensaje
+ * `PEDIDO <slug>-<nonce>` viaja al ingest, que lo compara con el slug del proyecto y DESCARTA
+ * el pedido entero si no coincide ("pedido de otro negocio").
  *
- * El fallback histórico hacía `String(project_id).slice(0, 8)`, pensado para UUIDs.
- * En proyectos con nombre el id ES el slug ("the-pirate"), así que el corte producía
- * "the-pira": un slug válido en apariencia que se horneaba en la carta y tiraba todos
- * los pedidos (medido 18-nov-2026: pedido T226, 12 €, descartado en el ingest).
+ * El fallback histórico fabricaba la identidad con `String(project_id).slice(0, 8)`, pensado
+ * para UUIDs. En proyectos con nombre el id ES el slug ("the-pirate"), así que producía
+ * "the-pira": un slug válido en apariencia que se horneaba en la carta y tiraba los pedidos
+ * (medido 18-nov-2026: pedido T226, 12 €, descartado en el ingest 6 s después de entrar).
+ *
+ * La regla que se prueba aquí: el slug llega como DATO (slugHint del caller, carril del
+ * project.activated/list.response, o el resolutor que consulta al dueño). Si no hay dato, se
+ * ABORTA — nunca se fabrica una identidad.
  *
  * Ejecutar: node tests/unit/carta-digital__slug-de-id.test.js
  */
@@ -21,43 +25,70 @@ const CartaDigital = require('../../modules/pizzepos/carta-digital');
 const tests = [];
 function test(name, fn) { tests.push({ name, fn }); }
 
-test('id-slug (el id ES el slug) → se usa COMPLETO, no truncado a 8', () => {
+const UUID = 'aaaa1111-2222-3333-4444-555566667777';
+const BASE = '/opt/enki/data/projects/the-pirate';
+
+function nuevo({ resolver } = {}) {
   const m = new CartaDigital();
-  assert.strictEqual(m._slugDeId('the-pirate'), 'the-pirate');
-  assert.strictEqual(m._slugDeId('nonina'), 'nonina');
-  assert.strictEqual(m._slugDeId('despacho-de-pan'), 'despacho-de-pan');
+  m.logs = [];
+  m.logger = { info: () => {}, warn: (e, p) => m.logs.push([e, p]), error: () => {}, debug: () => {} };
+  m.eventBus = { publish: () => {}, subscribe: () => () => {} };
+  m._proyectos = { slugDe: resolver || (async (id) => id) };
+  return m;
+}
+
+test('_indexarCarril SIN slug no indexa: un carril sin identidad no se inventa', () => {
+  const m = nuevo();
+  const r = m._indexarCarril('the-pirate', 'The Pirate', BASE);
+  assert.strictEqual(r, null);
+  assert.strictEqual(m.activos.size, 0);
+  assert.ok(m.logs.some(([e]) => e === 'carta-digital.carril.sin_slug'));
 });
 
-test('UUID → sí se abrevia a 8 (no hay nombre del que sacar slug)', () => {
-  const m = new CartaDigital();
-  assert.strictEqual(m._slugDeId('aaaa1111-2222-3333-4444-555566667777'), 'aaaa1111');
-});
-
-test('id con mayúsculas/espacios → slugify, sin cortar', () => {
-  const m = new CartaDigital();
-  assert.strictEqual(m._slugDeId('The Pirate'), 'the-pirate');
-});
-
-test('carril indexado sin name: el slug del id-slug no se trunca', () => {
-  const m = new CartaDigital();
-  const carril = m._indexarCarril('the-pirate', null, null);
-  assert.strictEqual(carril.slug, 'the-pirate', `slug horneado: ${carril.slug}`);
-  // y queda alcanzable por su propio id (mapa de caras)
+test('_indexarCarril usa el slug DATO tal cual (no lo re-deriva del name)', () => {
+  const m = nuevo();
+  const r = m._indexarCarril('the-pirate', 'The Pirate', BASE, 'the-pirate');
+  assert.strictEqual(r.slug, 'the-pirate');
   assert.strictEqual(m.activos.get('the-pirate').slug, 'the-pirate');
 });
 
-test('project.activated PARCIAL (sin name) no pisa el carril ya conocido', () => {
-  const m = new CartaDigital();
-  m.eventBus = { publish: () => {} };
-  m._indexarCarril('the-pirate', 'The Pirate', '/opt/enki/data/projects/the-pirate');
-  assert.strictEqual(m.activos.get('the-pirate').slug, 'the-pirate');
+test('_resolverSlug: el slugHint del caller manda', async () => {
+  const m = nuevo({ resolver: async () => { throw new Error('no debería consultar'); } });
+  assert.strictEqual(await m._resolverSlug('the-pirate', 'the-pirate'), 'the-pirate');
+});
+
+test('_resolverSlug: usa el carril ya conocido sin consultar', async () => {
+  const m = nuevo({ resolver: async () => { throw new Error('no debería consultar'); } });
+  m._indexarCarril('the-pirate', 'The Pirate', BASE, 'the-pirate');
+  assert.strictEqual(await m._resolverSlug('the-pirate'), 'the-pirate');
+});
+
+test('_resolverSlug: sin dato, resuelve con el resolutor (mapa del dueño / base_path)', async () => {
+  const m = nuevo({ resolver: async (id) => (id === 'the-pirate' ? 'the-pirate' : id) });
+  assert.strictEqual(await m._resolverSlug('the-pirate'), 'the-pirate');
+});
+
+test('_resolverSlug: UUID sin mapa → null (fail-closed, no se publica)', async () => {
+  const m = nuevo({ resolver: async (id) => id });   // el resolutor devuelve la llave tal cual
+  assert.strictEqual(await m._resolverSlug(UUID), null);
+});
+
+test('project.activated PARCIAL (sin name/base_path/slug) conserva el carril conocido', async () => {
+  const m = nuevo();
+  m._indexarCarril('the-pirate', 'The Pirate', BASE, 'the-pirate');
 
   // Lo que emitió hermes-cli el 18-nov: solo el id.
-  m._onProjectActivated({ data: { project_id: 'the-pirate' } });
+  await m._onProjectActivated({ data: { project_id: 'the-pirate' } });
 
   assert.strictEqual(m.activos.get('the-pirate').slug, 'the-pirate', 'el slug se truncó al activar');
   assert.strictEqual(m.activos.get('the-pirate').name, 'The Pirate', 'el name se perdió al activar');
-  assert.strictEqual(m.activos.get('the-pirate').base_path, '/opt/enki/data/projects/the-pirate');
+  assert.strictEqual(m.activos.get('the-pirate').base_path, BASE);
+});
+
+test('project.activated PARCIAL sin carril previo: resuelve, nunca trunca', async () => {
+  const m = nuevo({ resolver: async (id) => (id === 'the-pirate' ? 'the-pirate' : id) });
+  await m._onProjectActivated({ data: { project_id: 'the-pirate' } });
+  assert.strictEqual(m.activos.get('the-pirate')?.slug, 'the-pirate');
 });
 
 (async () => {

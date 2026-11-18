@@ -1150,7 +1150,13 @@ class HTTPGateway {
         // keep only SvelteKit") y con él `serveStaticFile`. La llamada se quedó
         // aquí: cualquier /ui/* no reconocido —/ui/request/... incluido— daba
         // 500 "serveStaticFile is not a function" en vez de un 404 honesto.
-        await this.sendError(response, 404, 'UI not found');
+        //
+        // OJO: aquí va `res` (el ServerResponse REAL), no el objeto `response`
+        // simulado de arriba. Ese simulacro solo tiene writeHead/end —le basta a
+        // los handlers del UIGateway— pero sendError → sendResponse usa
+        // res.setHeader, y con el simulacro revienta con:
+        //   "res.setHeader is not a function"
+        await this.sendError(res, 404, 'UI not found');
       }
     } catch (error) {
       if (this.logger) {

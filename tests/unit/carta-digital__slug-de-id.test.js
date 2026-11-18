@@ -46,6 +46,20 @@ test('carril indexado sin name: el slug del id-slug no se trunca', () => {
   assert.strictEqual(m.activos.get('the-pirate').slug, 'the-pirate');
 });
 
+test('project.activated PARCIAL (sin name) no pisa el carril ya conocido', () => {
+  const m = new CartaDigital();
+  m.eventBus = { publish: () => {} };
+  m._indexarCarril('the-pirate', 'The Pirate', '/opt/enki/data/projects/the-pirate');
+  assert.strictEqual(m.activos.get('the-pirate').slug, 'the-pirate');
+
+  // Lo que emitió hermes-cli el 18-nov: solo el id.
+  m._onProjectActivated({ data: { project_id: 'the-pirate' } });
+
+  assert.strictEqual(m.activos.get('the-pirate').slug, 'the-pirate', 'el slug se truncó al activar');
+  assert.strictEqual(m.activos.get('the-pirate').name, 'The Pirate', 'el name se perdió al activar');
+  assert.strictEqual(m.activos.get('the-pirate').base_path, '/opt/enki/data/projects/the-pirate');
+});
+
 (async () => {
   let passed = 0; const fails = [];
   for (const { name, fn } of tests) {

@@ -230,7 +230,14 @@ class CartaDigitalModule extends BaseModule {
   _onProjectActivated(event) {
     const d = event?.data || event;
     if (!d?.project_id) return;
-    this._indexarCarril(d.project_id, d.name, d.base_path);
+    // `project.activated` puede llegar PARCIAL (sin name/base_path: lo emite Hermes al abrir
+    // el proyecto). Indexar a ciegas PISA la entrada buena del mapa: el carril pasa a tener
+    // el slug del fallback truncado ("the-pira") y el siguiente rehorneo automático hornea
+    // ese slug → el ingest descarta los pedidos ("pedido de otro negocio"). Medido 18-nov-
+    // 2026: activación desde hermes-cli a las 19:21:56 y pedido T226 perdido a las 19:29.
+    // Un evento parcial COMPLETA lo que falta; nunca sobrescribe con vacío.
+    const previa = this.activos.get(d.project_id);
+    this._indexarCarril(d.project_id, d.name || previa?.name, d.base_path || previa?.base_path);
     this.ultimoActivo = d.project_id;
     this.eventBus.publish('tarifas.config.solicitada', { project_id: d.project_id, correlation_id: crypto.randomUUID() });
   }

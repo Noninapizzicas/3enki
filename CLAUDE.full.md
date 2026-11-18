@@ -16560,7 +16560,7 @@ PIEZAS {
   modules/whatsapp-bot (v1.5.0, BORRADO)                                   (era: webhook Meta + alta por UI + snapshot + #P1 + re-tasado + sendTemplate; hoy el carril es el puente Rust → whatsapp.mensaje.recibido)
   modules/whatsapp-bot/services/meta-cloud-client.js (Meta Cloud API: sendText/sendTemplate/_postMessage/parseWebhookEvent)
   modules/whatsapp-bot/services/pedido-parser.js (#P1: _decodificarEstructura + metodo_pago)
-  modules/pizzepos/carta-digital (2.26.0)        (PWA emite #P1 + paridad mitad + nombre obligatorio + botones metodo_pago)
+  modules/pizzepos/carta-digital (2.26.1)        (PWA emite #P1 + paridad mitad + nombre obligatorio + botones metodo_pago)
   modules/pizzepos/pedidos (3.5.0)               (estructura tienda → cocina ; ancla = cliente_nombre ; metodo_pago ; onPagoConfirmado con recreación del huérfano)
   modules/pago-gateway (3.1.0)                  (ÓRGANO de cobro provider-agnóstico: Stripe + SumUp; cuenta y clave POR PROYECTO)
   modules/credential-manager (2.3.0)             (META_WHATSAPP[_VERIFY_TOKEN] + GLOVO PROJECT_ONLY + la clave de pago por proyecto)

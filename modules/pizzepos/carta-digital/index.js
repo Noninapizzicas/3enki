@@ -188,11 +188,20 @@ class CartaDigitalModule extends BaseModule {
     if (base_path) { try { caras.push(require('path').basename(base_path)); } catch (_) {} }
     return caras.filter((c, i) => c && caras.indexOf(c) === i);
   }
+  // El project_id NO siempre es un UUID: en los proyectos con nombre, el id ES el slug
+  // ("the-pirate"). Truncarlo a 8 produce "the-pira", un slug VÁLIDO en apariencia que el
+  // ingest lee como «pedido de otro negocio» y descarta ENTERO (medido 18-nov-2026: el
+  // pedido T226 se perdió así). Solo se abrevia cuando el id es de verdad un UUID sin
+  // nombre conocido; si el id ya es el slug, se usa completo.
+  _slugDeId(project_id) {
+    const id = String(project_id || '');
+    return /^[0-9a-f]{8}-[0-9a-f]{4}-/i.test(id) ? id.slice(0, 8) : (slugify(id) || id);
+  }
   _indexarCarril(project_id, name, base_path) {
     if (!project_id) return null;
     const entrada = {
       name: name || '',
-      slug: name ? slugify(name) : String(project_id).slice(0, 8),
+      slug: name ? slugify(name) : this._slugDeId(project_id),
       base_path: base_path || null
     };
     for (const cara of this._carasDe(project_id, name, base_path)) this.activos.set(cara, entrada);
@@ -444,7 +453,7 @@ class CartaDigitalModule extends BaseModule {
       return this._err(412, 'PRECONDITION_FAILED',
         `el filesystem escribe en el proyecto activo («${nomActivo}»), no en el objetivo (${project_id}). Activa el proyecto objetivo antes de publicar para no escribir su carta en otro.`);
     }
-    const slug = slugHint || this.activos.get(project_id)?.slug || String(project_id).slice(0, 8);
+    const slug = slugHint || this.activos.get(project_id)?.slug || this._slugDeId(project_id);
 
     const proy = await this._proyectarPublica(project_id);
     if (proy.status !== 200) return proy;   // 404 sin carta / 503 fuentes caídas — propaga
@@ -656,7 +665,7 @@ class CartaDigitalModule extends BaseModule {
           : MODOS_DEFAULT,
         whatsapp_telefono: normalizarTelefono(op.whatsapp_telefono || b.negocio?.redes?.whatsapp || b.negocio?.local?.telefono || ''),
         mensaje_header: op.mensaje_pedido || '¡Hola! Quiero pedir:',
-        project_slug: this.activos.get(project_id)?.slug || String(project_id).slice(0, 8),
+        project_slug: this.activos.get(project_id)?.slug || this._slugDeId(project_id),
         pago_online: !!op.pago_online,
         pedido_endpoint: '',                           // SUELTA: checkout WhatsApp (no online)
         tema: {

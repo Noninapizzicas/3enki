@@ -20,6 +20,11 @@ const crypto = require('crypto');
 const BaseModule = require('../../_shared/base-module');
 const { proyectarCartaPublica, normalizarTelefono } = require('./proyeccion');
 const { generateStaticHTML, generateServiceWorker, generateManifest, generateIcon, slugify } = require('./static-template');
+// El slug es IDENTIDAD, no cálculo: su dueño (project-manager) lo produce una vez y viaja en
+// project.activated / project.list.response. Este resolutor es el único camino para las llaves
+// (uuid ↔ slug) y NUNCA inventa una identidad. Cocina, cuentas y persistencia-comandero ya lo
+// usan; carta-digital era el único que re-derivaba con String(project_id).slice(0,8).
+const ResolutorProyecto = require('../../_shared/resolutor-proyecto');
 
 const CONFIG_PATH = '/pizzepos/carta-digital/config.json';
 // Los modos de consumo que el sistema sabe operar. Un negocio ELIGE un subconjunto en
@@ -60,6 +65,9 @@ class CartaDigitalModule extends BaseModule {
     this._hidrataRequestId = null;
     this.ultimoActivo = null;
     this._subs = [];
+    // Resolutor de identidad (uuid ↔ slug). onLoad lo cablea al bus; sin bus devuelve la
+    // llave tal cual, que es el comportamiento correcto cuando la llave YA es el slug.
+    this._proyectos = new ResolutorProyecto();
     // REPUBLICACIÓN AUTOMÁTICA (ver _autoPublicar): un timer por proyecto que coalesce la
     // ráfaga de señales de una misma edición. repubMs es ajustable (tests).
     this._repubTimers = new Map();
@@ -73,6 +81,8 @@ class CartaDigitalModule extends BaseModule {
     this.uiHandler = core.uiHandler;
     this.config = core.config || {};
     this.moduleRegistry = core.moduleRegistry;   // para leer el catálogo de ingredientes por instancia (patrón cuentas-canales→cuentas)
+    this._proyectos = new ResolutorProyecto({ eventBus: this.eventBus, logger: this.logger, metrics: this.metrics });
+    this._proyectos.calentar();
 
     const sub = (ev, fn) => { try { this._subs.push(this.eventBus.subscribe(ev, fn)); } catch (_) {} };
     sub('tarifas.config.actualizada', e => this._onTarifas(e));
@@ -188,15 +198,35 @@ class CartaDigitalModule extends BaseModule {
     if (base_path) { try { caras.push(require('path').basename(base_path)); } catch (_) {} }
     return caras.filter((c, i) => c && caras.indexOf(c) === i);
   }
-  _indexarCarril(project_id, name, base_path) {
+  // El slug es DATO, no cálculo. Lo produce su dueño (project-manager) UNA vez y viaja en
+  // project.activated / project.list.response / slugHint del caller. Aquí no se re-deriva:
+  // eran 12 copias del mismo algoritmo y la que difería horneó "the-pira" en vez de
+  // "the-pirate" → el ingest descartó el pedido T226 entero ("pedido de otro negocio").
+  // Sin slug conocido NO se indexa: un carril sin identidad no se inventa.
+  _indexarCarril(project_id, name, base_path, slug) {
     if (!project_id) return null;
+    if (!slug) { this.logger?.warn?.('carta-digital.carril.sin_slug', { project_id }); return null; }
     const entrada = {
       name: name || '',
-      slug: name ? slugify(name) : String(project_id).slice(0, 8),
+      slug: String(slug),
       base_path: base_path || null
     };
     for (const cara of this._carasDe(project_id, name, base_path)) this.activos.set(cara, entrada);
     return entrada;
+  }
+
+  // El slug del bundle: dato del caller o del carril ya conocido; si no, se RESUELVE con el
+  // resolutor (mapa del dueño / base_path). Nunca se fabrica. null = no hay identidad → el
+  // llamante debe abortar (fail-closed): mejor no publicar que publicar un slug falso.
+  async _resolverSlug(project_id, slugHint) {
+    const directo = slugHint || this.activos.get(project_id)?.slug;
+    if (directo) return String(directo);
+    const resuelto = await this._proyectos.slugDe(project_id);
+    if (resuelto === null || resuelto === undefined || resuelto === '') return null;
+    const s = String(resuelto);
+    // Si el resolutor no encontró el mapa devuelve la llave tal cual; un UUID no es un slug.
+    if (ResolutorProyecto.UUID_RE.test(s)) return null;
+    return s;
   }
   // Se hidrata desde la fuente de verdad al onLoad (project.list.request): sin eso
   // el mapa nace VACÍO tras un hot-reload y todo id cae al activo global.
@@ -213,15 +243,24 @@ class CartaDigitalModule extends BaseModule {
     const proyectos = Array.isArray(data.projects) ? data.projects : [];
     for (const p of proyectos) {
       if (!p?.id) continue;
-      this._indexarCarril(p.id, p.name, p.base_path);
+      // p.slug lo calcula el dueño del dato (project-manager). base_path es el respaldo real
+      // del disco (la carpeta física = el slug). Si no hay ninguno, no se indexa.
+      const slug = p.slug || (p.base_path ? require('path').basename(p.base_path) : null);
+      this._indexarCarril(p.id, p.name, p.base_path, slug);
     }
     this.logger?.info('carta-digital.carriles.hidratados', { carriles: this.activos.size, proyectos: proyectos.length });
   }
 
-  _onProjectActivated(event) {
+  async _onProjectActivated(event) {
     const d = event?.data || event;
     if (!d?.project_id) return;
-    this._indexarCarril(d.project_id, d.name, d.base_path);
+    // `project.activated` puede llegar PARCIAL (sin name/base_path/slug: lo emite hermes-cli al
+    // abrir el proyecto). El slug se RESUELVE (mapa del dueño o base_path), nunca se fabrica:
+    // el fallback String(project_id).slice(0,8) horneó "the-pira" y el ingest descartó el
+    // pedido T226. Un evento parcial COMPLETA lo que falta; nunca sobrescribe con vacío.
+    const previa = this.activos.get(d.project_id);
+    const slug = d.slug || previa?.slug || await this._resolverSlug(d.project_id);
+    this._indexarCarril(d.project_id, d.name || previa?.name, d.base_path || previa?.base_path, slug);
     this.ultimoActivo = d.project_id;
     this.eventBus.publish('tarifas.config.solicitada', { project_id: d.project_id, correlation_id: crypto.randomUUID() });
   }
@@ -444,7 +483,13 @@ class CartaDigitalModule extends BaseModule {
       return this._err(412, 'PRECONDITION_FAILED',
         `el filesystem escribe en el proyecto activo («${nomActivo}»), no en el objetivo (${project_id}). Activa el proyecto objetivo antes de publicar para no escribir su carta en otro.`);
     }
-    const slug = slugHint || this.activos.get(project_id)?.slug || String(project_id).slice(0, 8);
+    // FAIL-CLOSED: sin identidad resuelta no se hornea. Un slug inventado no falla en el
+    // bundle (se ve correcto) — falla en el ingest, que descarta el pedido entero.
+    const slug = await this._resolverSlug(project_id, slugHint);
+    if (!slug) {
+      return this._err(412, 'SLUG_NO_RESUELTO',
+        `no puedo resolver el slug de ${project_id}: sin identidad no se publica (el pedido viajaría con un slug que el ingest descarta).`);
+    }
 
     const proy = await this._proyectarPublica(project_id);
     if (proy.status !== 200) return proy;   // 404 sin carta / 503 fuentes caídas — propaga
@@ -648,6 +693,10 @@ class CartaDigitalModule extends BaseModule {
       const colores = b.colores || {};
       const [diseno, config] = await Promise.all([this._leerDiseno(project_id), this._leerConfig(project_id)]);
       const op = config.opciones_visualizacion || {};
+      // El bundle de preview lleva el MISMO slug que el publicado: identidad resuelta, no
+      // fabricada. Sin slug no hay preview — mejor un 412 que una maqueta que miente.
+      const slugPreview = await this._resolverSlug(project_id);
+      if (!slugPreview) return this._err(412, 'SLUG_NO_RESUELTO', `no puedo resolver el slug de ${project_id}: sin identidad no se genera la preview.`);
       const tplConfig = {                              // espejo del de publicar, pero suelta
         nombre_negocio: b.nombre || this.activos.get(project_id)?.name || 'Carta',
         moneda: op.moneda || '€',
@@ -656,7 +705,7 @@ class CartaDigitalModule extends BaseModule {
           : MODOS_DEFAULT,
         whatsapp_telefono: normalizarTelefono(op.whatsapp_telefono || b.negocio?.redes?.whatsapp || b.negocio?.local?.telefono || ''),
         mensaje_header: op.mensaje_pedido || '¡Hola! Quiero pedir:',
-        project_slug: this.activos.get(project_id)?.slug || String(project_id).slice(0, 8),
+        project_slug: slugPreview,
         pago_online: !!op.pago_online,
         pedido_endpoint: '',                           // SUELTA: checkout WhatsApp (no online)
         tema: {

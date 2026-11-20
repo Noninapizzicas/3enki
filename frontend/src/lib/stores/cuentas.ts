@@ -54,6 +54,10 @@ export interface Cuenta {
   hora_recogida?: string;
   /** Tiempo estimado en minutos para preparación */
   tiempo_estimado?: number;
+  /** Número de pedido con prefijo de canal: "M 521", "L 520". */
+  numero_pedido?: string | null;
+  /** Nombre de la PERSONA que pide (null si es una etiqueta operativa). */
+  cliente_nombre?: string | null;
 }
 
 export interface CuentasState {
@@ -462,6 +466,8 @@ export async function loadCuentasFromPersistencia(projectId: string, tipo?: stri
           created_at: cp.created_at,
           updated_at: cp.updated_at,
           itemsDetalle: itemsDetalle.length > 0 ? itemsDetalle : undefined,
+          numero_pedido: cp.numero_pedido || existingCuenta?.numero_pedido || null,
+          cliente_nombre: cp.cliente_nombre || existingCuenta?.cliente_nombre || null,
           modo_consumo: cp.datos_especificos?.modo_consumo || existingCuenta?.modo_consumo,
           hora_recogida: cp.datos_especificos?.hora_recogida || existingCuenta?.hora_recogida,
           tiempo_estimado: cp.datos_especificos?.tiempo_estimado || existingCuenta?.tiempo_estimado

@@ -1,6 +1,7 @@
 {
   "name": "impresion",
-  "version": "4.0.0",
+  "version": "4.0.1",
+  "_v4_0_1_nota": "v4.0.1 (2026-11-20): EL TICKET DE PIEZA USA LA IDENTIDAD OPERATIVA SEPARADA. Si `cocina.item_ticket` trae `numero_pedido` ('L 518'/'M 123') y `cliente_nombre`, el ticket imprime el número en grande y el cliente debajo, en vez de descomponer el `ref_display` compuesto (que puede ser 'Mesa 40 M 123'). Sin los campos nuevos, el comportamiento es EXACTAMENTE el de antes (ref_display tal cual).",
   "description": "Formateo ESC/POS y envio directo a impresoras ESP32 via MQTT. Autodescubrimiento de impresoras. Sin capas intermedias.",
   "author": "Pizzepos Team",
   "language": "es",

@@ -101,7 +101,9 @@
     {:else}
       <span class="tipo-icon">{icon}</span>
     {/if}
-    <span class="nombre">{cuenta.nombre}</span>
+    <span class="nombre"
+          title={[cuenta.numero_pedido, cuenta.cliente_nombre].filter(Boolean).join(' · ') || cuenta.nombre}
+    >{cuenta.numero_pedido || cuenta.nombre}{cuenta.cliente_nombre ? ' · ' + cuenta.cliente_nombre : ''}</span>
     <span class="hora">{cuenta.hora}</span>
   </div>
 

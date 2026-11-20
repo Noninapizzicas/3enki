@@ -397,6 +397,7 @@ class ImpresionModule extends BaseModule {
     const data = this._unwrap(event);
     const {
       pedido_id, cuenta_id, canal, ref_display,
+      numero_pedido, cliente_nombre,
       item_id, nombre, cantidad, categoria, estacion,
       ingredientes, variaciones, notas, impresora, project_id, pieza
     } = data;
@@ -410,7 +411,7 @@ class ImpresionModule extends BaseModule {
 
     try {
       const ticket = this.formatearTicketPieza({
-        pedido_id, cuenta_id, canal, ref_display,
+        pedido_id, cuenta_id, canal, ref_display, numero_pedido, cliente_nombre,
         nombre, cantidad, categoria, estacion,
         ingredientes, variaciones, notas, pieza
       });
@@ -716,7 +717,7 @@ class ImpresionModule extends BaseModule {
     }
   }
 
-  formatearTicketPieza({ pedido_id, cuenta_id, canal, ref_display,
+  formatearTicketPieza({ pedido_id, cuenta_id, canal, ref_display, numero_pedido, cliente_nombre,
                          nombre, cantidad, categoria, estacion,
                          ingredientes, variaciones, notas, pieza }) {
     const lineas = [];
@@ -724,7 +725,12 @@ class ImpresionModule extends BaseModule {
     lineas.push(CMD.FEED_3);
 
     let refCuenta, detalleCuenta;
-    if (ref_display) {
+    if (numero_pedido) {
+      // Identidad operativa separada: "L 518" en grande y el cliente debajo. No se
+      // descompone el ref_display (que puede ser "Mesa 40 M 123").
+      refCuenta     = String(numero_pedido).toUpperCase();
+      detalleCuenta = cliente_nombre ? String(cliente_nombre).toUpperCase() : null;
+    } else if (ref_display) {
       refCuenta     = ref_display.toUpperCase();
       detalleCuenta = null;
     } else {

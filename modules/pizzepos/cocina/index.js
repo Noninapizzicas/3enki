@@ -1312,6 +1312,10 @@ class CocinaModule extends BaseModule {
       cuenta_id: pedidoCocina.cuenta_id,
       project_id: pedidoCocina.project_id || null,
       ref_display: pedidoCocina.ref_display || null,
+      // Identidad operativa separada (aditivo): la impresora compone "L 518" + cliente
+      // sin descomponer el ref_display.
+      numero_pedido: pedidoCocina.numero_pedido || null,
+      cliente_nombre: pedidoCocina.cliente_nombre || null,
       canal: pedidoCocina.canal || null,
       item_id: item.item_id,
       producto_id: item.producto_id,
@@ -1340,6 +1344,8 @@ class CocinaModule extends BaseModule {
       pedido_id: pedido.pedido_id,
       cuenta_id: pedido.cuenta_id,
       ref_display: pedido.ref_display || null,
+      numero_pedido: pedido.numero_pedido || null,
+      cliente_nombre: pedido.cliente_nombre || null,
       canal: pedido.canal || null,
       items_count: pedido.items.length,
       tiempo_preparacion: pedido.tiempo_preparacion,

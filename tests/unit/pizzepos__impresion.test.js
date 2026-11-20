@@ -522,6 +522,31 @@ function publishedOf(mocks, name) {
     await m.onUnload();
   });
 
+  await testAsync('ticket pieza: numero_pedido separado y cliente debajo (no el ref_display compuesto)', async () => {
+    const mocks = makeMocks({ noMqtt: true });
+    const { module: m } = await instantiate(mocks);
+    const ticket = m.formatearTicketPieza({
+      pedido_id: 'p-2', cuenta_id: 'c-2', ref_display: 'Mesa 40 M 123',
+      numero_pedido: 'M 123', cliente_nombre: 'Mijael',
+      nombre: 'Mahón', cantidad: 1, categoria: 'pizzas', estacion: 'horno'
+    });
+    assert.ok(ticket.includes('M 123'), 'el número de pedido va en el ticket');
+    assert.ok(ticket.includes('MIJAEL'), 'el cliente va como detalle');
+    assert.ok(!ticket.includes('MESA 40'), 'no se imprime la etiqueta vieja de mesa');
+    await m.onUnload();
+  });
+
+  await testAsync('ticket pieza: sin los campos nuevos usa ref_display (compatibilidad)', async () => {
+    const mocks = makeMocks({ noMqtt: true });
+    const { module: m } = await instantiate(mocks);
+    const ticket = m.formatearTicketPieza({
+      pedido_id: 'p-3', cuenta_id: 'c-3', ref_display: 'Luis L 391',
+      nombre: 'Mahón', cantidad: 1, categoria: 'pizzas', estacion: 'horno'
+    });
+    assert.ok(ticket.includes('LUIS L 391'), 'el display viejo se sigue imprimiendo igual');
+    await m.onUnload();
+  });
+
   console.log('\nTodos los tests pasaron.');
   process.exit(0);
 })();

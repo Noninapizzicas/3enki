@@ -304,6 +304,88 @@ test('sin activado:true responde 404 y no atiende', async () => {
   assert.strictEqual(r.data.error.code, 'NOT_FOUND');
 });
 
+// ── identidad del cliente ───────────────────────────────────────────────────
+
+const CTX_PEDIDO = {
+  productos: [],
+  pedidos: [{ cuenta_id: 'llevar_1', cliente_nombre: 'Mijael', numero_pedido: 'L 527', estado: 'en_cocina', created_at: '2026-11-20T14:00:00Z' }]
+};
+
+test('estado_pedido con cuenta_id: responde sin preguntar el nombre', () => {
+  const m = nuevo();
+  const r = m.responder('estado_pedido', {}, CTX_PEDIDO, '¿cómo va mi pedido?', { nombre: null, cuenta_id: 'llevar_1' });
+  assert.strictEqual(r.resuelto, true);
+  assert.ok(r.texto.startsWith('Mijael, tu pedido'), r.texto);
+  assert.ok(r.texto.includes('en cocina'), r.texto);
+});
+
+test('sin cuenta_id ni nombre: pregunta (no adivina)', () => {
+  const m = nuevo();
+  const r = m.responder('estado_pedido', {}, CTX_PEDIDO, '¿cómo va mi pedido?', { nombre: null, cuenta_id: null });
+  assert.strictEqual(r.resuelto, false);
+  assert.ok(/nombre/i.test(r.texto));
+});
+
+test('sesión: el nombre dicho se recuerda para el turno siguiente', () => {
+  const m = nuevo();
+  const s = m._sesion('s1');
+  s.esperando = 'nombre';
+  assert.strictEqual(m._sesion('s1').esperando, 'nombre');
+  m._sesion('s1').nombre = 'Mijael';
+  assert.strictEqual(m._sesion('s1').nombre, 'Mijael');
+});
+
+test('"soy Mijael" se extrae; "soy el asistente" no', () => {
+  const m = nuevo();
+  assert.strictEqual(m._nombreDicho('hola, soy Mijael'), 'Mijael');
+  assert.strictEqual(m._nombreDicho('me llamo Mijael Rodas'), 'Mijael Rodas');
+  assert.strictEqual(m._nombreDicho('soy el asistente'), null);
+});
+
+test('respuesta a "¿con qué nombre?": un nombre sí, una frase no', () => {
+  const m = nuevo();
+  assert.strictEqual(m._posibleNombre('Mijael'), 'Mijael');
+  assert.strictEqual(m._posibleNombre('¿cuánto cuesta la pizza?'), null);
+  assert.strictEqual(m._posibleNombre('pedido'), null);
+});
+
+test('publica portero.pregunta y portero.respuesta con el hecho completo', async () => {
+  const m = nuevo();
+  const ev = [];
+  m.eventBus = { publish: async (n, p) => ev.push([n, p]) };
+  m._cfgProyecto = () => ({ activado: true, modo: 'sombra' });
+  m._contexto = async () => ({ carta: { productos: [] }, productos: [], pedidos: [], opciones: {}, servicio: null });
+
+  await m.handleChatPost({ body: {
+    project_id: 'the-pirate', message: '¿estáis abiertos?', sesion_id: 's1', cuenta_id: 'llevar_1'
+  } });
+
+  const preg = ev.find(([n]) => n === 'portero.pregunta');
+  assert.ok(preg, 'no se publicó portero.pregunta');
+  assert.strictEqual(preg[1].mensaje, '¿estáis abiertos?');
+  assert.strictEqual(preg[1].sesion_id, 's1');
+  assert.strictEqual(preg[1].cuenta_id, 'llevar_1');
+
+  const resp = ev.find(([n]) => n === 'portero.respuesta');
+  assert.ok(resp, 'no se publicó portero.respuesta');
+  assert.strictEqual(resp[1].mensaje, '¿estáis abiertos?');
+  assert.strictEqual(resp[1].intencion, 'horario');
+  assert.ok(typeof resp[1].texto === 'string' && resp[1].texto.length > 0);
+});
+
+test('contrato: todo evento publicado está declarado en module.json (y al revés)', () => {
+  const fs = require('fs');
+  const path = require('path');
+  const src = fs.readFileSync(path.join(__dirname, '../../modules/pizzepos/portero/index.js'), 'utf8');
+  const manifest = JSON.parse(fs.readFileSync(path.join(__dirname, '../../modules/pizzepos/portero/module.json'), 'utf8'));
+
+  const declarados = new Set((manifest.events?.publishes || []).map(e => e.event));
+  const publicados = new Set([...src.matchAll(/publish\?\.\('([a-z0-9_.]+)'/g)].map(m => m[1]));
+
+  for (const ev of publicados) assert.ok(declarados.has(ev), `evento publicado sin declarar en el contrato: ${ev}`);
+  for (const ev of declarados) assert.ok(publicados.has(ev), `evento declarado que no se publica: ${ev}`);
+});
+
 // ── runner ──────────────────────────────────────────────────────────────────
 
 (async () => {

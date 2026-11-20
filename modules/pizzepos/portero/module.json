@@ -1,6 +1,7 @@
 {
   "name": "portero",
-  "version": "0.1.0",
+  "version": "0.2.0",
+  "_v0_2_0_nota": "v0.2.0 (2026-11-20): NO SE PREGUNTA EL NOMBRE QUE YA SE SABE. El cliente que pide deja su nombre en el pedido; el portero lo ignoraba y volvía a pedirlo. Ahora la identidad se resuelve en este orden: (1) `nombre` en el body, (2) `cuenta_id` en el body —la cuenta ES la identidad del pedido, se busca por cuenta y no por nombre—, (3) nombre ya dicho en la sesión (`sesion_id`), (4) si el mensaje trae 'soy X'/'me llamo X'. Solo si no hay ninguna se pregunta, y la respuesta a esa pregunta se recuerda para el turno siguiente. Memoria por sesión con TTL 30 min y poda a 500. Sin LLM.",
   "description": "El PORTERO del comercio — capa 1 determinista del asistente de la carta. Responde las ocho intenciones de servicio (horario, qué lleva, alérgenos, precio, reparto, tiempo, estado del pedido, pedir) consultando la VERDAD del proyecto por el bus: la carta proyectada (carta-digital), el servicio (lector-servicio) y los pedidos. No genera hechos: elige intención, consulta y rellena plantilla. Si no hay dato, lo dice; nunca inventa precio, plazo ni disponibilidad. Nace en MODO SOMBRA: responde y registra, pero no emite acciones al cliente. El LLM queda fuera de esta capa (solo traducirá lenguaje libre a intención en una capa posterior, con validación determinista).",
   "author": "Event Core Team",
   "language": "es",
@@ -8,6 +9,16 @@
 
   "events": {
     "publishes": [
+      {
+        "event": "portero.pregunta",
+        "description": "El cliente preguntó. Se publica ANTES de responder y lleva el mensaje crudo: es el hecho que permite a cualquier módulo (promociones, marketing, cocina) reaccionar sin que el portero sepa que existe.",
+        "payload": "{ project_id, sesion_id, cuenta_id, mensaje, canal }"
+      },
+      {
+        "event": "portero.respuesta",
+        "description": "Cierre del turno: qué se interpretó y qué se contestó, con la acción emitida si la hubo. Junto con portero.pregunta deja la conversación completa en un solo punto.",
+        "payload": "{ project_id, sesion_id, cuenta_id, mensaje, intencion, resuelto, texto, acciones, modo, ms }"
+      },
       {
         "event": "portero.turno",
         "description": "Cada turno atendido por el portero. Es la materia prima de la medición: qué preguntan antes de pedir. Informativo.",

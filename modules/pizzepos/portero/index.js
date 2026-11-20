@@ -51,6 +51,10 @@ class PorteroModule extends BaseModule {
     // interno NO llega al uiHandler (ese camino es el del bus MQTT), y el turno salía con
     // "no puedo consultar la carta". Comprobado en el deploy del 20-nov.
     this.mqttRequest = core.mqttRequest;
+    // Memoria corta de la conversación: si el cliente ya dijo su nombre (o viene con la
+    // cuenta del pedido), no se le vuelve a preguntar. No es estado de negocio: es
+    // contexto de la charla, con TTL y tope.
+    this._sesiones = new Map();
     this._proyectos = new ResolutorProyecto({ eventBus: this.eventBus, logger: this.logger, metrics: this.metrics });
     this.servicio = new LectorServicio({ eventBus: this.eventBus, logger: this.logger, metrics: this.metrics, resolutor: this._proyectos });
     this.logger?.info('module.loaded', { module: this.name, version: this.version, mode: 'portero-determinista' });
@@ -58,6 +62,7 @@ class PorteroModule extends BaseModule {
 
   async onUnload() {
     this._ctxCache.clear();
+    this._sesiones?.clear();
     this.logger?.info('module.unloaded', { module: this.name });
   }
 
@@ -298,17 +303,20 @@ class PorteroModule extends BaseModule {
       }
 
       case 'tiempo': {
-        const pedido = this._pedidoDeCliente(ctx, extra.nombre);
+        const pedido = this._pedidoDeCliente(ctx, extra.nombre, extra.cuenta_id);
         if (pedido) return { resuelto: true, texto: `Tu pedido está ${pedido.estado.replace(/_/g, ' ')}. Te aviso en cuanto esté listo.`, acciones: [] };
         // No hay ETA en el sistema: se dice la verdad en vez de prometer minutos.
         return { resuelto: true, texto: 'No te quiero dar un tiempo a ojo: en cuanto lo pidas te digo cómo va.', acciones: [] };
       }
 
       case 'estado_pedido': {
-        if (!extra.nombre) return { resuelto: false, texto: 'Dime el nombre con el que hiciste el pedido y te digo cómo va.', acciones: [] };
-        const pedido = this._pedidoDeCliente(ctx, extra.nombre);
-        if (!pedido) return { resuelto: false, texto: `No encuentro un pedido a nombre de ${extra.nombre}. ¿Me lo confirmas?`, acciones: [] };
-        return { resuelto: true, texto: `${extra.nombre}, tu pedido está ${pedido.estado.replace(/_/g, ' ')}.`, acciones: [] };
+        const pedido = this._pedidoDeCliente(ctx, extra.nombre, extra.cuenta_id);
+        if (!pedido) {
+          if (!extra.nombre) return { resuelto: false, texto: 'Dime el nombre con el que hiciste el pedido y te digo cómo va.', acciones: [] };
+          return { resuelto: false, texto: `No encuentro un pedido a nombre de ${extra.nombre}. ¿Me lo confirmas?`, acciones: [] };
+        }
+        const quien = extra.nombre || pedido.cliente_nombre || null;
+        return { resuelto: true, texto: `${quien ? `${quien}, tu` : 'Tu'} pedido está ${pedido.estado.replace(/_/g, ' ')}.`, acciones: [] };
       }
 
       case 'oferta':
@@ -334,12 +342,64 @@ class PorteroModule extends BaseModule {
     }
   }
 
-  _pedidoDeCliente(ctx, nombre) {
+  _pedidoDeCliente(ctx, nombre, cuenta_id) {
+    const pedidos = ctx.pedidos || [];
+    // La CUENTA es la identidad del pedido: si el cliente llega con la suya (la que creó
+    // al pedir), no hace falta que repita el nombre. Se queda con el más reciente.
+    if (cuenta_id) {
+      const deCuenta = pedidos.filter(p => p.cuenta_id === cuenta_id);
+      if (deCuenta.length) {
+        return deCuenta.slice().sort((a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0))[0];
+      }
+    }
     if (!nombre) return null;
     const n = this._norm(nombre);
-    const candidatos = (ctx.pedidos || []).filter(p => this._norm(p.cliente_nombre || p.nombre_cliente || '').includes(n));
+    const candidatos = pedidos.filter(p => this._norm(p.cliente_nombre || p.nombre_cliente || '').includes(n));
     if (candidatos.length !== 1) return null;   // 0 o ambiguo: no se adivina
     return candidatos[0];
+  }
+
+  // ── contexto de la conversación ─────────────────────────────────────────────
+
+  // Memoria corta por sesión: nombre ya dicho y si estamos esperándolo. TTL 30 min y
+  // poda al pasar de 500 sesiones — no es estado de negocio, es la charla.
+  _sesion(id) {
+    const ahora = Date.now();
+    if (!this._sesiones) this._sesiones = new Map();
+    if (!id) return { nombre: null, esperando: null, updated: ahora };
+    let s = this._sesiones.get(id);
+    if (!s || (ahora - s.updated) > 30 * 60 * 1000) {
+      s = { nombre: null, esperando: null, updated: ahora };
+      this._sesiones.set(id, s);
+    }
+    s.updated = ahora;
+    if (this._sesiones.size > 500) {
+      for (const [k, v] of this._sesiones) {
+        if ((ahora - v.updated) > 30 * 60 * 1000) this._sesiones.delete(k);
+      }
+    }
+    return s;
+  }
+
+  // "soy Mijael", "me llamo Mijael", "a nombre de Mijael". Descarta artículos para no
+  // tomar "soy el asistente" como un nombre.
+  _nombreDicho(texto) {
+    const m = String(texto || '').match(/\b(?:soy|me llamo|a nombre de)\s+([A-Za-zÁÉÍÓÚÜÑáéíóúüñ][A-Za-zÁÉÍÓÚÜÑáéíóúüñ' -]{1,40})/i);
+    if (!m) return null;
+    const n = m[1].trim().replace(/\s+/g, ' ').replace(/[.,!?¡¿]+$/, '');
+    if (/^(el|la|los|las|un|una|de|del)\b/i.test(n)) return null;
+    return n.slice(0, 60);
+  }
+
+  // Respuesta a "¿con qué nombre?": 1-3 palabras, solo letras, que no sean otra cosa.
+  _posibleNombre(texto) {
+    const t = String(texto || '').trim().replace(/[.,!?¡¿]+/g, '');
+    if (!t || t.split(/\s+/).length > 3) return null;
+    if (!/^[A-Za-zÁÉÍÓÚÜÑáéíóúüñ][A-Za-zÁÉÍÓÚÜÑáéíóúüñ' -]{1,40}$/.test(t)) return null;
+    const NO = new Set(['hola', 'buenas', 'gracias', 'si', 'no', 'vale', 'ok', 'nada', 'carta',
+      'precio', 'horario', 'pedido', 'pizza', 'mahon', 'reparto', 'ofertas']);
+    if (NO.has(this._norm(t))) return null;
+    return t.slice(0, 60);
   }
 
   // ── HTTP ────────────────────────────────────────────────────────────────────
@@ -349,7 +409,8 @@ class PorteroModule extends BaseModule {
     const body = req?.body || {};
     const project_id = body.project_id;
     const message = String(body.message || '').trim();
-    const nombre = body.nombre || null;
+    const sesion_id = body.sesion_id || body.session_id || null;
+    const cuenta_id = body.cuenta_id || null;
 
     if (!project_id || !message) {
       return this._json(400, { error: { code: 'INVALID_INPUT', message: 'project_id y message son obligatorios' } });
@@ -361,15 +422,44 @@ class PorteroModule extends BaseModule {
     }
     const modo = cfg.modo === 'vivo' ? 'vivo' : 'sombra';
 
+    // IDENTIDAD: explícita > la de su cuenta/pedido > la que ya dijo en la sesión. Solo
+    // se pregunta si no hay ninguna. El nombre del pedido es el que puso el cliente al
+    // pedir: si ya está ahí, volver a pedirlo es hacerle repetir lo que ya dijo.
+    const sesion = this._sesion(sesion_id);
+    let nombre = body.nombre || sesion.nombre || null;
+    const dicho = this._nombreDicho(message);
+    if (dicho) { nombre = dicho; sesion.nombre = dicho; sesion.esperando = null; }
+    if (!nombre && sesion.esperando === 'nombre') {
+      const posible = this._posibleNombre(message);
+      if (posible) { nombre = posible; sesion.nombre = posible; sesion.esperando = null; }
+    }
+
     let ctx, intencion = 'desconocida', respuesta;
     try {
+      // EL HECHO COMPLETO, ANTES DE RESPONDER: quién pregunta, con qué sesión y cuenta, y
+      // qué dice exactamente. Un consumidor (promociones, marketing, cocina) puede leerlo y
+      // reaccionar sin que este módulo sepa que existe. Se publica antes de responder para
+      // que el hecho no se pierda si el turno falla.
+      try {
+        this.eventBus?.publish?.('portero.pregunta', {
+          project_id, sesion_id, cuenta_id,
+          mensaje: message,
+          canal: body.canal || null
+        });
+      } catch (_) { /* la medición nunca tumba el turno */ }
+
       ctx = await this._contexto(project_id);
       if (!ctx?.carta) {
         respuesta = { resuelto: false, texto: 'No puedo consultar la carta ahora mismo. Inténtalo en un momento.', acciones: [] };
       } else {
         const c = this.clasificar(message, ctx.productos);
         intencion = c.intencion;
-        respuesta = this.responder(intencion, c.args, ctx, message, { nombre });
+        respuesta = this.responder(intencion, c.args, ctx, message, { nombre, cuenta_id });
+        // Si la respuesta se quedó corta por no saber quién es, se pide UNA vez y se
+        // recuerda para el siguiente turno.
+        if (!respuesta.resuelto && !nombre && (intencion === 'estado_pedido' || intencion === 'tiempo')) {
+          sesion.esperando = 'nombre';
+        }
       }
     } catch (err) {
       this.logger?.error('portero.turno.failed', { project_id, error: err.message });
@@ -383,6 +473,17 @@ class PorteroModule extends BaseModule {
     try {
       this.metrics?.increment?.('portero.turno.total', { project: project_id, intencion, modo, resuelto: String(!!respuesta.resuelto) });
       this.eventBus?.publish?.('portero.turno', { project_id, intencion, resuelto: !!respuesta.resuelto, modo, ms });
+      // Cierre del hecho: qué se interpretó y qué se contestó. Junto con portero.pregunta,
+      // deja en un solo punto la pregunta y la respuesta — la demanda real del negocio.
+      this.eventBus?.publish?.('portero.respuesta', {
+        project_id, sesion_id, cuenta_id,
+        mensaje: message,
+        intencion,
+        resuelto: !!respuesta.resuelto,
+        texto: respuesta.texto,
+        acciones,
+        modo, ms
+      });
       if (!respuesta.resuelto) {
         this.eventBus?.publish?.('portero.escalada', {
           project_id, motivo: intencion === 'desconocida' ? 'intencion_desconocida' : 'dato_ausente',

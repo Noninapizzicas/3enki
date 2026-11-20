@@ -436,6 +436,18 @@ class PorteroModule extends BaseModule {
 
     let ctx, intencion = 'desconocida', respuesta;
     try {
+      // EL HECHO COMPLETO, ANTES DE RESPONDER: quién pregunta, con qué sesión y cuenta, y
+      // qué dice exactamente. Un consumidor (promociones, marketing, cocina) puede leerlo y
+      // reaccionar sin que este módulo sepa que existe. Se publica antes de responder para
+      // que el hecho no se pierda si el turno falla.
+      try {
+        this.eventBus?.publish?.('portero.pregunta', {
+          project_id, sesion_id, cuenta_id,
+          mensaje: message,
+          canal: body.canal || null
+        });
+      } catch (_) { /* la medición nunca tumba el turno */ }
+
       ctx = await this._contexto(project_id);
       if (!ctx?.carta) {
         respuesta = { resuelto: false, texto: 'No puedo consultar la carta ahora mismo. Inténtalo en un momento.', acciones: [] };
@@ -461,6 +473,17 @@ class PorteroModule extends BaseModule {
     try {
       this.metrics?.increment?.('portero.turno.total', { project: project_id, intencion, modo, resuelto: String(!!respuesta.resuelto) });
       this.eventBus?.publish?.('portero.turno', { project_id, intencion, resuelto: !!respuesta.resuelto, modo, ms });
+      // Cierre del hecho: qué se interpretó y qué se contestó. Junto con portero.pregunta,
+      // deja en un solo punto la pregunta y la respuesta — la demanda real del negocio.
+      this.eventBus?.publish?.('portero.respuesta', {
+        project_id, sesion_id, cuenta_id,
+        mensaje: message,
+        intencion,
+        resuelto: !!respuesta.resuelto,
+        texto: respuesta.texto,
+        acciones,
+        modo, ms
+      });
       if (!respuesta.resuelto) {
         this.eventBus?.publish?.('portero.escalada', {
           project_id, motivo: intencion === 'desconocida' ? 'intencion_desconocida' : 'dato_ausente',

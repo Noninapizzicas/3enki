@@ -349,6 +349,30 @@ test('respuesta a "¿con qué nombre?": un nombre sí, una frase no', () => {
   assert.strictEqual(m._posibleNombre('pedido'), null);
 });
 
+test('publica portero.pregunta y portero.respuesta con el hecho completo', async () => {
+  const m = nuevo();
+  const ev = [];
+  m.eventBus = { publish: async (n, p) => ev.push([n, p]) };
+  m._cfgProyecto = () => ({ activado: true, modo: 'sombra' });
+  m._contexto = async () => ({ carta: { productos: [] }, productos: [], pedidos: [], opciones: {}, servicio: null });
+
+  await m.handleChatPost({ body: {
+    project_id: 'the-pirate', message: '¿estáis abiertos?', sesion_id: 's1', cuenta_id: 'llevar_1'
+  } });
+
+  const preg = ev.find(([n]) => n === 'portero.pregunta');
+  assert.ok(preg, 'no se publicó portero.pregunta');
+  assert.strictEqual(preg[1].mensaje, '¿estáis abiertos?');
+  assert.strictEqual(preg[1].sesion_id, 's1');
+  assert.strictEqual(preg[1].cuenta_id, 'llevar_1');
+
+  const resp = ev.find(([n]) => n === 'portero.respuesta');
+  assert.ok(resp, 'no se publicó portero.respuesta');
+  assert.strictEqual(resp[1].mensaje, '¿estáis abiertos?');
+  assert.strictEqual(resp[1].intencion, 'horario');
+  assert.ok(typeof resp[1].texto === 'string' && resp[1].texto.length > 0);
+});
+
 // ── runner ──────────────────────────────────────────────────────────────────
 
 (async () => {

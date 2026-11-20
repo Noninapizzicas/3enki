@@ -86,6 +86,25 @@ test('cuenta.actualizada refresca el cliente del pedido activo', async () => {
   assert.strictEqual(m.pedidosActivos.get('p1').cliente_nombre, 'Mijael');
 });
 
+test('el evento cocina.item_ticket lleva numero_pedido y cliente_nombre', async () => {
+  const m = nuevo();
+  const publicados = [];
+  m._publicarEvento = async (ev, payload) => { publicados.push([ev, payload]); };
+
+  const pedido = {
+    pedido_id: 'p1', cuenta_id: 'M_1', project_id: 'the-pirate',
+    ref_display: 'Mijael M 123', numero_pedido: 'M 123', cliente_nombre: 'Mijael', canal: 'mesa'
+  };
+  const item = { item_id: 'i1', producto_id: 'la_flota_mahon', nombre: 'Mahón', cantidad: 1 };
+
+  await m._publishItemTicket(pedido, item, 'horno', null);
+  const ev = publicados.find(([e]) => e === 'cocina.item_ticket');
+  assert.ok(ev, 'no se publicó cocina.item_ticket');
+  assert.strictEqual(ev[1].numero_pedido, 'M 123');
+  assert.strictEqual(ev[1].cliente_nombre, 'Mijael');
+  assert.strictEqual(ev[1].ref_display, 'Mijael M 123', 'el display sigue viajando');
+});
+
 (async () => {
   let passed = 0; const fails = [];
   for (const { name, fn } of tests) {

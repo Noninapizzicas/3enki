@@ -889,6 +889,10 @@ class CuentasModule extends BaseModule {
       turno:       cuenta.turno,
       tipo:        cuenta.tipo,
       nombre:      cuenta.nombre,
+      // Identidad operativa (aditivo): prefijo + turno, y el cliente cuando lo hay.
+      // Los consumidores viejos siguen leyendo `ref_display`/`nombre`.
+      numero_pedido: cuenta.numero_pedido || null,
+      cliente_nombre: cuenta.cliente_nombre || null,
       ref_display: cuenta.ref_display,
       origen:      cuenta.nombre || cuenta.tipo,
       total:       cuenta.total,

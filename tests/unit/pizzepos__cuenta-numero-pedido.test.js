@@ -29,8 +29,7 @@ function nuevo() {
   m.logger = { info: () => {}, warn: () => {}, error: () => {}, debug: () => {} };
   m.metrics = { increment: () => {}, gauge: () => {}, timing: () => {} };
   m.eventBus = { publish: async () => {} };
-  m._publishCuentaCreada = async () => {};
-  m._publishCuentaActualizada = async () => {};
+  m._publicarEvento = async () => {};
   m._gestionarAlerta = () => {};
   m._saveTurnoDebounced = () => {};
   m._slugProyecto = async (p) => p;
@@ -92,6 +91,19 @@ test('el número de pedido es único dentro del turno (no se repite)', async () 
   const a = await crear(m, { tipo: 'mesa', nombre: 'Mesa 1' });
   const b = await crear(m, { tipo: 'llevar', nombre: 'Ana' });
   assert.notStrictEqual(a.data.numero_pedido, b.data.numero_pedido);
+});
+
+test('cuenta.creada publica numero_pedido y cliente_nombre (aditivo, sin quitar ref_display)', async () => {
+  const m = nuevo();
+  const publicados = [];
+  m._publicarEvento = async (ev, payload) => { publicados.push([ev, payload]); };
+
+  const r = await crear(m, { tipo: 'llevar', nombre: 'Mijael' });
+  const ev = publicados.find(([e]) => e === 'cuenta.creada');
+  assert.ok(ev, 'no se publicó cuenta.creada');
+  assert.strictEqual(ev[1].numero_pedido, r.data.numero_pedido);
+  assert.strictEqual(ev[1].cliente_nombre, 'Mijael');
+  assert.ok(ev[1].ref_display, 'ref_display debe seguir viajando para los consumidores viejos');
 });
 
 (async () => {

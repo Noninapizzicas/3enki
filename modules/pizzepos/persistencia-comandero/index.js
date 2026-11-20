@@ -167,6 +167,11 @@ class PersistenciaComanderoModule extends BaseModule {
       tipo,
       nombre:            nombre || null,
       origen,
+      // Identidad operativa (aditivo): número de pedido + cliente. El comandero lee
+      // por aquí (persistencia), no por cuenta.list; sin esto la tarjeta cae al
+      // nombre viejo aunque el backend ya tenga los campos.
+      numero_pedido:     eventData.numero_pedido || null,
+      cliente_nombre:    eventData.cliente_nombre || null,
       ref_display:       ref_display || null,
       estado:            estado || 'pendiente',
       datos_especificos: datosEspecificos,
@@ -301,6 +306,8 @@ class PersistenciaComanderoModule extends BaseModule {
     if (cambios.items       !== undefined) cuenta.items       = cambios.items;
     if (cambios.estado      !== undefined) cuenta.estado      = cambios.estado;
     if (cambios.ref_display !== undefined) cuenta.ref_display = cambios.ref_display;
+    if (cambios.numero_pedido !== undefined) cuenta.numero_pedido = cambios.numero_pedido;
+    if (cambios.cliente_nombre !== undefined) cuenta.cliente_nombre = cambios.cliente_nombre;
     if (cambios.nombre      !== undefined) {
       cuenta.datos_especificos = cuenta.datos_especificos || {};
       cuenta.datos_especificos.nombre = cambios.nombre;
@@ -402,10 +409,25 @@ class PersistenciaComanderoModule extends BaseModule {
   // UI Handlers (auto-wired desde module.json)
   // ==========================================
 
+  // Proyección de compatibilidad: las cuentas abiertas ANTES del contrato no tienen
+  // `numero_pedido`/`cliente_nombre` guardados. El número se DERIVA de dos datos que la
+  // cuenta siempre tuvo (tipo + turno) —"M 515" es exactamente su identidad—, no se
+  // inventa. Es solo de lectura: no reescribe el fichero persistido.
+  _proyectarCuenta(c) {
+    const SIMBOLOS = { mesa: 'M', local: 'M', llevar: 'L', telefono: 'T', whatsapp: 'W', glovo: 'G', delivery: 'D', llevadoo: 'V' };
+    const numero_pedido = c.numero_pedido
+      || (Number.isInteger(c.turno) ? `${SIMBOLOS[c.tipo] || 'M'} ${String(c.turno).padStart(3, '0')}` : null);
+    const cliente_nombre = c.cliente_nombre
+      || c.datos_especificos?.cliente_nombre
+      || c.datos_especificos?.nombre_cliente
+      || null;
+    return { ...c, numero_pedido, cliente_nombre };
+  }
+
   async handleGetCuentasActivas(data) {
     try {
       const { project_id, tipo } = data || {};
-      let cuentas = Array.from(this.cuentasActivasCache.values());
+      let cuentas = Array.from(this.cuentasActivasCache.values()).map(c => this._proyectarCuenta(c));
       if (project_id) {
         // Cualquier llave pregunta por el proyecto entero: el cache puede tener
         // cuentas con UUID (historicas) y con slug (nuevas) del MISMO negocio.

@@ -1,6 +1,7 @@
 {
   "name": "cuentas",
-  "version": "3.0.0",
+  "version": "3.1.0",
+  "_v3_1_nota": "v3.1.0 (2026-11-20): IDENTIDAD OPERATIVA EN LA CUENTA — DOS CAMPOS Y NADA MÁS. La cuenta nace con `numero_pedido` (prefijo del tipo de servicio + turno: 'M 123', 'L 391', 'T 12') y `cliente_nombre` (solo si es una persona; las etiquetas automáticas 'Mesa 40'/'Cliente WhatsApp' no cuentan). NO existe número de mesa: el prefijo ya dice cómo se sirve y el número es el del PEDIDO, no el de una mesa. Antes el mismo concepto tenía tres nombres según el canal (numero_ticket, numero_pedido, metadata.numero) y `ref_display` los concatenaba en un string irreversible. `nombre` y `ref_display` se mantienen como compatibilidad mientras migran cocina/impresión/frontend. El rename actualiza `cliente_nombre` solo si el nuevo nombre es una persona (una etiqueta no borra al cliente). Test: tests/unit/pizzepos__cuenta-numero-pedido.test.js.",
   "description": "Gestion de cuentas con ciclo de vida completo (POS ticket lifecycle) — 100% Event-Driven. State machine de 7 estados orquestando items + cocina + cobro.",
   "author": "Pizzepos Team",
   "language": "es",

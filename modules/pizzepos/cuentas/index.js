@@ -462,7 +462,10 @@ class CuentasModule extends BaseModule {
       // venga el project_id como uuid o como slug. Persistencia y consultas leen igual.
       const projectIdFinal = await this._slugProyecto(project_id);
       const cuenta_id = cuentaIdPropuesto || this._buildCuentaId(tipoFinal);
-      const { turno, ref_display } = this._generateRefDisplay(tipoFinal, nombre);
+      const { turno, numero_pedido, cliente_nombre: clienteDeNombre, ref_display } = this._generateRefDisplay(tipoFinal, nombre);
+      // El nombre del cliente puede venir explícito (canal) o deducirse del nombre de la
+      // cuenta cuando NO es una etiqueta automática ("Mesa 40", "Cliente WhatsApp"…).
+      const clienteNombre = data?.cliente_nombre || clienteDeNombre || null;
 
       const now  = new Date();
       const hora = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
@@ -472,6 +475,11 @@ class CuentasModule extends BaseModule {
         project_id: projectIdFinal,
         turno,
         tipo: tipoFinal,
+        // Los DOS campos de la operativa: número de pedido (prefijo = tipo) y cliente.
+        // `nombre` y `ref_display` se mantienen como compatibilidad mientras migran
+        // cocina/impresión/frontend.
+        numero_pedido,
+        cliente_nombre: clienteNombre,
         nombre: nombre || null,
         ref_display,
         estado: 'pendiente',
@@ -679,6 +687,10 @@ class CuentasModule extends BaseModule {
 
       const nombre_anterior = cuenta.nombre;
       cuenta.nombre     = nombre.trim().slice(0, 50);
+      // El nombre del cliente sigue al rename solo si el nuevo nombre es una persona.
+      // Renombrar a una etiqueta operativa ("Mesa 12") NO borra el cliente ya conocido.
+      const esEtiqueta = /^(Mesa|Llevadoo|Cliente Glovo|Cliente WhatsApp|Cliente)(\s|$)/i.test(cuenta.nombre || '');
+      if (!esEtiqueta) cuenta.cliente_nombre = cuenta.nombre;
       cuenta.updated_at = new Date().toISOString();
 
       // Recomponer ref_display: si tenemos turno (fuente de verdad), regenerar
@@ -695,7 +707,10 @@ class CuentasModule extends BaseModule {
       }
 
       await this._publishCuentaActualizada(cuenta.project_id, id, {
-        nombre: cuenta.nombre, ref_display: cuenta.ref_display || null
+        nombre: cuenta.nombre,
+        numero_pedido: cuenta.numero_pedido || null,
+        cliente_nombre: cuenta.cliente_nombre || null,
+        ref_display: cuenta.ref_display || null
       }, data);
 
       this.logger.info('cuenta.renombrada', { cuenta_id: id, nombre_anterior, nombre_nuevo: cuenta.nombre });
@@ -1124,7 +1139,16 @@ class CuentasModule extends BaseModule {
     const symbol = CuentasModule.SIMBOLOS[tipo] || 'M';
     const esAuto = nombre && /^(Mesa|Llevadoo|Cliente Glovo|Cliente WhatsApp|Cliente)(\s|$)/i.test(nombre);
     const nombreFinal = esAuto ? null : (nombre || null);
-    return { turno, numero, ref_display: this._buildRefDisplay(symbol, numero, nombreFinal) };
+    return {
+      turno,
+      numero,
+      // IDENTIDAD OPERATIVA: prefijo (tipo de servicio) + número de pedido.
+      // NO existe número de mesa: la M solo dice que se sirve en mesa. El número
+      // es el del PEDIDO (turno), no el de una mesa. Dos campos, nada más.
+      numero_pedido: `${symbol} ${numero}`,
+      cliente_nombre: nombreFinal,
+      ref_display: this._buildRefDisplay(symbol, numero, nombreFinal)
+    };
   }
 
   // ==========================================

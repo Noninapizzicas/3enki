@@ -111,10 +111,10 @@ class PorteroModule extends BaseModule {
     return d;
   }
 
-  async _contexto(project_id) {
+  async _contexto(project_id, { fresco = false } = {}) {
     const ahora = Date.now();
     const cache = this._ctxCache.get(project_id);
-    if (cache && (ahora - cache.ts) < CTX_TTL_MS) return cache.ctx;
+    if (!fresco && cache && (ahora - cache.ts) < CTX_TTL_MS) return cache.ctx;
 
     const [pub, cfg, servicio, pedidos, cuentas] = await Promise.all([
       this._ui('cartadigital', 'get_carta_publica', { project_id }),
@@ -344,19 +344,36 @@ class PorteroModule extends BaseModule {
 
   _pedidoDeCliente(ctx, nombre, cuenta_id) {
     const pedidos = ctx.pedidos || [];
+    // CERRADOS fuera: un pedido cancelado de hace dos horas no es "tu pedido". Con
+    // histórico acumulado, buscar por nombre devolvía el cancelado más antiguo.
+    const CERRADOS = new Set(['cancelado', 'completado', 'entregado', 'rechazado']);
+    const abiertos = pedidos.filter(p => !CERRADOS.has(p.estado));
     // La CUENTA es la identidad del pedido: si el cliente llega con la suya (la que creó
     // al pedir), no hace falta que repita el nombre. Se queda con el más reciente.
     if (cuenta_id) {
       const deCuenta = pedidos.filter(p => p.cuenta_id === cuenta_id);
-      if (deCuenta.length) {
-        return deCuenta.slice().sort((a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0))[0];
-      }
+      const vivos = deCuenta.filter(p => !CERRADOS.has(p.estado));
+      const elegido = (vivos.length ? vivos : deCuenta)
+        .slice().sort((a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0))[0];
+      if (elegido) return elegido;
     }
     if (!nombre) return null;
     const n = this._norm(nombre);
-    const candidatos = pedidos.filter(p => this._norm(p.cliente_nombre || p.nombre_cliente || '').includes(n));
-    if (candidatos.length !== 1) return null;   // 0 o ambiguo: no se adivina
-    return candidatos[0];
+    const porNombre = p => this._norm(p.cliente_nombre || p.nombre_cliente || '').includes(n);
+    const candidatos = abiertos.filter(porNombre);
+    // Varios abiertos con el mismo nombre: NO se adivina. La vía fiable es `cuenta_id`.
+    return candidatos.length === 1 ? candidatos[0] : null;
+  }
+
+  // Los hechos de pedido invalidan el contexto: sin esto, un pedido recién enviado a
+  // cocina no se veía hasta que expiraba el TTL de 30 s.
+  async onPedidoCreado(event) { this._invalidarContexto(event); }
+  async onPedidoCancelado(event) { this._invalidarContexto(event); }
+  async onPedidoCompletado(event) { this._invalidarContexto(event); }
+  async onCocinaPedidoListo(event) { this._invalidarContexto(event); }
+  _invalidarContexto(event) {
+    const pid = event?.data?.project_id || event?.project_id || event?.payload?.project_id;
+    if (pid) this._ctxCache.delete(pid); else this._ctxCache.clear();
   }
 
   // ── contexto de la conversación ─────────────────────────────────────────────
@@ -466,6 +483,11 @@ class PorteroModule extends BaseModule {
           ? { intencion: intencionPendiente, args: {} }
           : this.clasificar(message, ctx.productos);
         intencion = c.intencion;
+        // El estado del pedido es un dato VIVO: no puede responderse con un contexto de
+        // hace 30 s. Se recarga sin caché justo para estas dos intenciones.
+        if (intencion === 'estado_pedido' || intencion === 'tiempo') {
+          ctx = await this._contexto(project_id, { fresco: true });
+        }
         respuesta = this.responder(intencion, c.args, ctx, message, { nombre, cuenta_id });
         // Si la respuesta se quedó corta por no saber quién es, se pide UNA vez y se
         // recuerda para el siguiente turno — incluida la intención que quedó a medias.

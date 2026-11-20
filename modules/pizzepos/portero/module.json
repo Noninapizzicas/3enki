@@ -29,7 +29,24 @@
         "payload": "{ project_id, motivo, mensaje, intencion, contexto? }"
       }
     ],
-    "subscribes": []
+    "subscribes": [
+      {
+        "event": "pedido.creado",
+        "description": "Invalida el contexto: un pedido nuevo cambia lo que el portero debe ver."
+      },
+      {
+        "event": "pedido.cancelado",
+        "description": "Invalida el contexto: el pedido deja de estar vivo."
+      },
+      {
+        "event": "pedido.completado",
+        "description": "Invalida el contexto."
+      },
+      {
+        "event": "cocina.pedido_listo",
+        "description": "Invalida el contexto: el estado que ve el cliente ha cambiado."
+      }
+    ]
   },
   "apis": [
     {
@@ -52,5 +69,5 @@
     }
   ],
   "tools": [],
-  "_v0_2_1_nota": "v0.2.1 (2026-11-20): la respuesta al nombre CONTINÚA la pregunta. En 0.2.0, tras preguntar \"¿con qué nombre?\", el turno siguiente con solo el nombre se clasificaba como intención desconocida y el cliente recibía \"No te he entendido\" después de haber contestado. Ahora la sesión guarda la intención que quedó pendiente y la retoma. Verificado en producción: 2b fallaba, ahora resuelve."
+  "_v0_2_1_nota": "v0.2.1 (2026-11-20): tres fallos que solo se ven en producción con datos vivos. (1) La respuesta al nombre CONTINÚA la pregunta: la sesión guarda `intencion_pendiente`; antes 'Mijael' se clasificaba como desconocida y el cliente recibía 'No te he entendido' tras contestar. (2) El estado del pedido se lee con contexto FRESCO: el caché de 30 s hacía que un pedido recién enviado a cocina no se viera. Además, los hechos pedido.creado/cancelado/completado y cocina.pedido_listo invalidan el contexto (subscribes). (3) Un pedido cancelado/completado NO es 'tu pedido': se buscan solo pedidos abiertos, y si hay varios con el mismo nombre NO se adivina — la vía fiable es cuenta_id."
 }

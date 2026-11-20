@@ -405,6 +405,27 @@ test('sesión: contestar el nombre NO cae en "No te he entendido"', async () => 
   assert.ok(ult.texto.includes('en cocina'), ult.texto);
 });
 
+test('identidad: un pedido CANCELADO no es "tu pedido"', () => {
+  const m = nuevo();
+  const ctx = { pedidos: [
+    { cuenta_id: 'c1', cliente_nombre: 'Mijael', estado: 'cancelado', created_at: '2026-11-20T10:00:00Z' },
+    { cuenta_id: 'c2', cliente_nombre: 'Mijael', estado: 'en_cocina', created_at: '2026-11-20T14:00:00Z' }
+  ] };
+  const p = m._pedidoDeCliente(ctx, 'Mijael', null);
+  assert.strictEqual(p.cuenta_id, 'c2');
+  const r = m.responder('estado_pedido', {}, ctx, '¿cómo va mi pedido?', { nombre: 'Mijael', cuenta_id: null });
+  assert.ok(r.texto.includes('en cocina'), r.texto);
+});
+
+test('identidad: dos abiertos con el mismo nombre NO se adivinan', () => {
+  const m = nuevo();
+  const ctx = { pedidos: [
+    { cuenta_id: 'c1', cliente_nombre: 'Mijael', estado: 'en_cocina', created_at: '2026-11-20T14:00:00Z' },
+    { cuenta_id: 'c2', cliente_nombre: 'Mijael', estado: 'en_cocina', created_at: '2026-11-20T14:05:00Z' }
+  ] };
+  assert.strictEqual(m._pedidoDeCliente(ctx, 'Mijael', null), null);
+});
+
 // ── runner ──────────────────────────────────────────────────────────────────
 
 (async () => {

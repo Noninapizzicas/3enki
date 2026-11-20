@@ -10,6 +10,16 @@
   "events": {
     "publishes": [
       {
+        "event": "portero.pregunta",
+        "description": "El cliente preguntó. Se publica ANTES de responder y lleva el mensaje crudo: es el hecho que permite a cualquier módulo (promociones, marketing, cocina) reaccionar sin que el portero sepa que existe.",
+        "payload": "{ project_id, sesion_id, cuenta_id, mensaje, canal }"
+      },
+      {
+        "event": "portero.respuesta",
+        "description": "Cierre del turno: qué se interpretó y qué se contestó, con la acción emitida si la hubo. Junto con portero.pregunta deja la conversación completa en un solo punto.",
+        "payload": "{ project_id, sesion_id, cuenta_id, mensaje, intencion, resuelto, texto, acciones, modo, ms }"
+      },
+      {
         "event": "portero.turno",
         "description": "Cada turno atendido por el portero. Es la materia prima de la medición: qué preguntan antes de pedir. Informativo.",
         "payload": "{ project_id, intencion, resuelto, modo, ms, producto? }"

@@ -373,6 +373,19 @@ test('publica portero.pregunta y portero.respuesta con el hecho completo', async
   assert.ok(typeof resp[1].texto === 'string' && resp[1].texto.length > 0);
 });
 
+test('contrato: todo evento publicado está declarado en module.json (y al revés)', () => {
+  const fs = require('fs');
+  const path = require('path');
+  const src = fs.readFileSync(path.join(__dirname, '../../modules/pizzepos/portero/index.js'), 'utf8');
+  const manifest = JSON.parse(fs.readFileSync(path.join(__dirname, '../../modules/pizzepos/portero/module.json'), 'utf8'));
+
+  const declarados = new Set((manifest.events?.publishes || []).map(e => e.event));
+  const publicados = new Set([...src.matchAll(/publish\?\.\('([a-z0-9_.]+)'/g)].map(m => m[1]));
+
+  for (const ev of publicados) assert.ok(declarados.has(ev), `evento publicado sin declarar en el contrato: ${ev}`);
+  for (const ev of declarados) assert.ok(publicados.has(ev), `evento declarado que no se publica: ${ev}`);
+});
+
 // ── runner ──────────────────────────────────────────────────────────────────
 
 (async () => {

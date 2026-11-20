@@ -276,6 +276,26 @@ test('onLoad lee la config de modules_config.portero (no de la raíz)', async ()
   assert.deepStrictEqual(m._cfgProyecto('otro'), {});
 });
 
+test('pedidos: filtra por proyecto, deduplica y saca el nombre de la CUENTA', () => {
+  const m = nuevo();
+  const pedidos = [
+    { id: 'p1', project_id: 'the-pirate', cuenta_id: 'c1', estado: 'en_cocina' },
+    { id: 'p1', project_id: 'the-pirate', cuenta_id: 'c1', estado: 'en_cocina' },
+    { id: 'p2', project_id: 'nonina', cuenta_id: 'c2', estado: 'en_cocina' }
+  ];
+  const cuentas = [{ id: 'c1', nombre: 'Mijael Rodas Limpias' }, { id: 'c2', nombre: 'Otro' }];
+  const r = m._pedidosDelProyecto(pedidos, cuentas, 'the-pirate');
+  assert.strictEqual(r.length, 1, 'no deduplicó o no filtró el proyecto');
+  assert.strictEqual(r[0].cliente_nombre, 'Mijael Rodas Limpias');
+});
+
+test('estado_pedido con nombre parcial del cliente', () => {
+  const m = nuevo({ pedidos: [{ id: 'p1', project_id: 'the-pirate', cliente_nombre: 'Mijael Rodas Limpias', estado: 'en_cocina' }] });
+  const r = dime(m, '¿cómo va mi pedido?', { nombre: 'Mijael' });
+  assert.ok(r.resuelto);
+  assert.ok(/en cocina/.test(r.texto), r.texto);
+});
+
 test('sin activado:true responde 404 y no atiende', async () => {
   const m = nuevo();
   m._cfgProyecto = () => ({});

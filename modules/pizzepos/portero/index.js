@@ -111,28 +111,50 @@ class PorteroModule extends BaseModule {
     const cache = this._ctxCache.get(project_id);
     if (cache && (ahora - cache.ts) < CTX_TTL_MS) return cache.ctx;
 
-    const [pub, cfg, servicio, pedidos] = await Promise.all([
+    const [pub, cfg, servicio, pedidos, cuentas] = await Promise.all([
       this._ui('cartadigital', 'get_carta_publica', { project_id }),
       this._ui('cartadigital', 'get_config', { project_id }),
       this.servicio.leer(project_id),
-      this._ui('pedido', 'list', {})
+      this._ui('pedido', 'list', {}),
+      this._ui('cuenta', 'list', { project_id })
     ]);
 
     const carta = this._cuerpo(pub, 'productos');
     const config = this._cuerpo(cfg, 'opciones_visualizacion') || cfg?.data || {};
     const listaPedidos = pedidos?.data?.pedidos || pedidos?.data?.data?.pedidos || [];
+    const listaCuentas = cuentas?.data?.cuentas || cuentas?.data?.data?.cuentas || [];
 
     const ctx = {
       carta,
       productos: Array.isArray(carta?.productos) ? carta.productos : [],
       opciones: config?.opciones_visualizacion || {},
       servicio: servicio || null,
-      // PRIVACIDAD: pedido/list devuelve TODOS los pedidos del sistema. Se filtra aquí,
-      // antes de mirar nada, para no enseñar el pedido de otro negocio.
-      pedidos: listaPedidos.filter(p => (p.project_id === project_id || p.project_slug === project_id || p.project === project_id))
+      // PRIVACIDAD: pedido/list devuelve TODOS los pedidos del sistema. Se filtra por
+      // proyecto y se deduplica (el mismo pedido aparece por varias cuentas) AQUÍ, antes
+      // de mirar nada, para no enseñar el pedido de otro negocio.
+      pedidos: this._pedidosDelProyecto(listaPedidos, listaCuentas, project_id)
     };
     this._ctxCache.set(project_id, { ctx, ts: ahora });
     return ctx;
+  }
+
+  // El pedido NO guarda el nombre del cliente: el nombre vive en la CUENTA
+  // (`cuenta.nombre`). Sin este cruce, "¿cómo va mi pedido?" nunca encontraba a nadie.
+  _pedidosDelProyecto(listaPedidos, listaCuentas, project_id) {
+    const nombrePorCuenta = new Map((listaCuentas || []).map(c => [c.id, c.nombre]));
+    const vistos = new Set();
+    const salida = [];
+    for (const p of (listaPedidos || [])) {
+      const delProyecto = p.project_id === project_id || p.project_slug === project_id || p.project === project_id;
+      if (!delProyecto) continue;
+      if (vistos.has(p.id)) continue;   // el Map trae el mismo pedido repetido por cuentas
+      vistos.add(p.id);
+      salida.push({
+        ...p,
+        cliente_nombre: p.cliente_nombre || p.nombre_cliente || nombrePorCuenta.get(p.cuenta_id) || null
+      });
+    }
+    return salida;
   }
 
   // ── clasificador (determinista) ─────────────────────────────────────────────

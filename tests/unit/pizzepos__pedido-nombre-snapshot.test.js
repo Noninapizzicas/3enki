@@ -79,6 +79,33 @@ test('snapshot: renombrar la cuenta NO reescribe el pedido ya creado', async () 
   assert.strictEqual(p1.data.cliente_nombre, 'Mijael', 'el pedido viejo no se reescribió');
 });
 
+test('bridge comandero→cocina: el pedido NACE con cliente_nombre y numero_pedido', async () => {
+  const m = nuevo();
+  m._publishPedidoCreado = async () => {};
+  m._publishEnviadoCocina = async () => {};
+  await m.onComanderoEnviarCocina({ data: {
+    pedido_id: 'ped_bridge_1', cuenta_id: 'llevar_x', project_id: 'the-pirate',
+    canal: 'llevar', ref_display: 'L 525', total: 12,
+    cliente_nombre: 'Mijael', numero_pedido: 'L 525',
+    items: [{ producto_id: 'la_flota_mahon', nombre: 'Mahón', cantidad: 1, precio: 12 }]
+  } });
+  const p = m.pedidos.get('ped_bridge_1');
+  assert.ok(p, 'no se creó el pedido');
+  assert.strictEqual(p.cliente_nombre, 'Mijael');
+  assert.strictEqual(p.numero_pedido, 'L 525');
+});
+
+test('bridge comandero→cocina: sin nombre en el evento, lo resuelve de la cuenta', async () => {
+  const m = nuevo({ mqttRequest: CUENTA_OK });
+  m._publishPedidoCreado = async () => {};
+  m._publishEnviadoCocina = async () => {};
+  await m.onComanderoEnviarCocina({ data: {
+    pedido_id: 'ped_bridge_2', cuenta_id: 'M_1', project_id: 'the-pirate',
+    items: [{ producto_id: 'x', nombre: 'Mahón', cantidad: 1, precio: 12 }]
+  } });
+  assert.strictEqual(m.pedidos.get('ped_bridge_2').cliente_nombre, 'Mijael Rodas Limpias');
+});
+
 (async () => {
   let passed = 0; const fails = [];
   for (const { name, fn } of tests) {

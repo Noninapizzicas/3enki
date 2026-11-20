@@ -351,6 +351,9 @@ class PedidosModule extends BaseModule {
         if (!existente.cliente_nombre) {
           existente.cliente_nombre = data?.cliente_nombre || await this._nombreDeCuenta(cuenta_id) || null;
         }
+        if (!existente.numero_pedido) {
+          existente.numero_pedido = data?.numero_pedido || null;
+        }
         // Los items de cocina son la verdad viva (nombre, precio, estructura); el shape
         // de origen (descripcion + centimos) se conserva para no dejar líneas mudas.
         existente.items = (items || []).map((item, idx) => {
@@ -390,6 +393,11 @@ class PedidosModule extends BaseModule {
         canal,
         ref_display: ref_display || null,
         project_id: project_id || null,
+        // IDENTIDAD DEL PEDIDO (snapshot al nacer). El comandero ya manda los dos campos;
+        // antes se descartaban en esta rama y el pedido nacía anónimo, así que el portero
+        // no podía responder "¿cómo va mi pedido?" ni cocina tenía a quién nombrar.
+        cliente_nombre: data?.cliente_nombre || await this._nombreDeCuenta(cuenta_id) || null,
+        numero_pedido: data?.numero_pedido || null,
         items: items.map(item => this._buildPedidoItem(item, 'en_cocina')),
         estado: 'en_cocina',
         subtotal: total || 0,

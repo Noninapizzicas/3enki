@@ -308,6 +308,14 @@
     "public_ns": "a"
   },
   "modules_config": {
+    "portero": {
+      "proyectos": {
+        "the-pirate": {
+          "activado": true,
+          "modo": "sombra"
+        }
+      }
+    },
     "ai-gateway": {
       "blueprint_orquestar_enabled": true
     },

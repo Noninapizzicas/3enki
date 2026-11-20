@@ -42,7 +42,10 @@ class PorteroModule extends BaseModule {
     this.logger = core.logger;
     this.metrics = core.metrics;
     this.eventBus = core.eventBus;
-    this.config = core.config || {};
+    // La config del módulo vive en `config.json → modules_config.portero`, NO en la raíz
+    // del config del core. Leerla mal deja el portero siempre apagado (404) aunque esté
+    // configurado: se comprobó en el deploy del 20-nov.
+    this.config = core.config?.modules_config?.[this.name] || {};
     this._proyectos = new ResolutorProyecto({ eventBus: this.eventBus, logger: this.logger, metrics: this.metrics });
     this.servicio = new LectorServicio({ eventBus: this.eventBus, logger: this.logger, metrics: this.metrics, resolutor: this._proyectos });
     this.logger?.info('module.loaded', { module: this.name, version: this.version, mode: 'portero-determinista' });
@@ -60,7 +63,6 @@ class PorteroModule extends BaseModule {
     const porProyecto = c.proyectos || c.projects || {};
     return porProyecto[project_id] || c[project_id] || {};
   }
-
   // RPC al wrapper UI del core (mismo camino que usa la PWA para publicar).
   _ui(dominio, accion, data, timeoutMs = RPC_TIMEOUT_MS) {
     if (!this.eventBus?.subscribe || !this.eventBus?.publish) return Promise.resolve(null);

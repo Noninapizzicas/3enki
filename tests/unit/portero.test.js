@@ -215,7 +215,6 @@ test('fail-closed: sin servicio no se afirma el horario', () => {
 
 function resStub() {
   const out = { eventos: [] };
-  out.writeHead = () => {};
   out.write = (s) => { out.eventos.push(s); };
   out.end = () => {};
   return out;
@@ -227,13 +226,29 @@ function parseSSE(eventos) {
     return { ev, data: da ? JSON.parse(da) : null };
   });
 }
+// El gateway llama `onConnect(res)` con el response REAL y mantiene la conexión.
+function recolectar(result) {
+  assert.strictEqual(result.status, 200);
+  assert.strictEqual(result.data?._responseType, 'sse', 'el gateway solo hace SSE con _responseType');
+  const res = resStub();
+  result.data.onConnect(res);
+  return parseSSE(res.eventos);
+}
+
+test('_ui usa mqttRequest del loader (uiHandler directo), no el eventBus interno', async () => {
+  const m = nuevo();
+  let visto = null;
+  m.mqttRequest = async (d, a, p) => { visto = [d, a, p]; return { status: 200, data: { productos: [{ nombre: 'X' }] } }; };
+  const r = await m._ui('cartadigital', 'get_carta_publica', { project_id: 'the-pirate' });
+  assert.deepStrictEqual(visto, ['cartadigital', 'get_carta_publica', { project_id: 'the-pirate' }]);
+  assert.ok(r.data.productos.length === 1);
+});
 
 test('modo sombra: responde pero NO emite accion (el carrito no se mueve)', async () => {
   const m = nuevo();
   m._cfgProyecto = () => ({ activado: true, modo: 'sombra' });
-  const res = resStub();
-  await m.handleChatPost({ body: { project_id: 'the-pirate', message: 'ponme una Port Royal' } }, res);
-  const evs = parseSSE(res.eventos);
+  const result = await m.handleChatPost({ body: { project_id: 'the-pirate', message: 'ponme una Port Royal' } });
+  const evs = recolectar(result);
   assert.ok(evs.some(e => e.ev === 'token'));
   assert.ok(!evs.some(e => e.ev === 'accion'), 'emitió acción en sombra');
   assert.strictEqual(evs.find(e => e.ev === 'fin').data.modo, 'sombra');
@@ -242,9 +257,8 @@ test('modo sombra: responde pero NO emite accion (el carrito no se mueve)', asyn
 test('modo vivo: sí emite la acción', async () => {
   const m = nuevo();
   m._cfgProyecto = () => ({ activado: true, modo: 'vivo' });
-  const res = resStub();
-  await m.handleChatPost({ body: { project_id: 'the-pirate', message: 'ponme una Port Royal' } }, res);
-  const evs = parseSSE(res.eventos);
+  const result = await m.handleChatPost({ body: { project_id: 'the-pirate', message: 'ponme una Port Royal' } });
+  const evs = recolectar(result);
   assert.ok(evs.some(e => e.ev === 'accion' && e.data.producto_id === 'la_flota_port_royal'));
 });
 
@@ -265,10 +279,9 @@ test('onLoad lee la config de modules_config.portero (no de la raíz)', async ()
 test('sin activado:true responde 404 y no atiende', async () => {
   const m = nuevo();
   m._cfgProyecto = () => ({});
-  let visto = null;
-  const res = { status: (s) => ({ json: (b) => { visto = { s, b }; } }), setHeader: () => {} };
-  await m.handleChatPost({ body: { project_id: 'the-pirate', message: 'hola' } }, res);
-  assert.strictEqual(visto.s, 404);
+  const r = await m.handleChatPost({ body: { project_id: 'the-pirate', message: 'hola' } });
+  assert.strictEqual(r.status, 404);
+  assert.strictEqual(r.data.error.code, 'NOT_FOUND');
 });
 
 // ── runner ──────────────────────────────────────────────────────────────────

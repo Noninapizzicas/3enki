@@ -46,6 +46,11 @@ class PorteroModule extends BaseModule {
     // del config del core. Leerla mal deja el portero siempre apagado (404) aunque esté
     // configurado: se comprobó en el deploy del 20-nov.
     this.config = core.config?.modules_config?.[this.name] || {};
+    // RPC canónica entre módulos: el loader inyecta `mqttRequest(domain, action, payload)`,
+    // que llama DIRECTO al uiHandler del core. Publicar `ui/request/...` en el eventBus
+    // interno NO llega al uiHandler (ese camino es el del bus MQTT), y el turno salía con
+    // "no puedo consultar la carta". Comprobado en el deploy del 20-nov.
+    this.mqttRequest = core.mqttRequest;
     this._proyectos = new ResolutorProyecto({ eventBus: this.eventBus, logger: this.logger, metrics: this.metrics });
     this.servicio = new LectorServicio({ eventBus: this.eventBus, logger: this.logger, metrics: this.metrics, resolutor: this._proyectos });
     this.logger?.info('module.loaded', { module: this.name, version: this.version, mode: 'portero-determinista' });
@@ -63,13 +68,17 @@ class PorteroModule extends BaseModule {
     const porProyecto = c.proyectos || c.projects || {};
     return porProyecto[project_id] || c[project_id] || {};
   }
-  // RPC al wrapper UI del core (mismo camino que usa la PWA para publicar).
-  _ui(dominio, accion, data, timeoutMs = RPC_TIMEOUT_MS) {
-    if (!this.eventBus?.subscribe || !this.eventBus?.publish) return Promise.resolve(null);
+  // RPC entre módulos: `mqttRequest` del loader (uiHandler directo). El fallback por
+  // eventBus solo existe para los tests sin core.
+  async _ui(dominio, accion, data) {
+    if (typeof this.mqttRequest === 'function') {
+      try { return await this.mqttRequest(dominio, accion, data); } catch (_) { return null; }
+    }
+    if (!this.eventBus?.subscribe || !this.eventBus?.publish) return null;
     const request_id = crypto.randomUUID();
     return new Promise((resolve) => {
       let unsub = null;
-      const t = setTimeout(() => { if (unsub) unsub(); resolve(null); }, timeoutMs);
+      const t = setTimeout(() => { if (unsub) unsub(); resolve(null); }, RPC_TIMEOUT_MS);
       try {
         unsub = this.eventBus.subscribe(`ui/response/${request_id}`, (event) => {
           const d = event?.data || event?.payload || event || {};
@@ -313,7 +322,7 @@ class PorteroModule extends BaseModule {
 
   // ── HTTP ────────────────────────────────────────────────────────────────────
 
-  async handleChatPost(req, res) {
+  async handleChatPost(req) {
     const t0 = Date.now();
     const body = req?.body || {};
     const project_id = body.project_id;
@@ -321,12 +330,12 @@ class PorteroModule extends BaseModule {
     const nombre = body.nombre || null;
 
     if (!project_id || !message) {
-      return this._json(res, 400, { status: 400, error: { code: 'INVALID_INPUT', message: 'project_id y message son obligatorios' } });
+      return this._json(400, { error: { code: 'INVALID_INPUT', message: 'project_id y message son obligatorios' } });
     }
 
     const cfg = this._cfgProyecto(project_id);
     if (cfg.activado !== true) {
-      return this._json(res, 404, { status: 404, error: { code: 'NOT_FOUND', message: `portero desactivado para ${project_id}` } });
+      return this._json(404, { error: { code: 'NOT_FOUND', message: `portero desactivado para ${project_id}` } });
     }
     const modo = cfg.modo === 'vivo' ? 'vivo' : 'sombra';
 
@@ -362,66 +371,53 @@ class PorteroModule extends BaseModule {
       if (modo === 'sombra') this.logger?.info?.('portero.sombra', { project_id, intencion, resuelto: !!respuesta.resuelto, ms });
     } catch (_) { /* la medición nunca tumba el turno */ }
 
-    return this._sse(res, {
+    return this._sse({
       texto: respuesta.texto,
       acciones,
       fin: { intencion, resuelto: !!respuesta.resuelto, modo, ms }
     });
   }
 
-  async handleChatOptions(req, res) {
-    if (res && typeof res.setHeader === 'function') {
-      res.setHeader('Access-Control-Allow-Origin', '*');
-      res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
-      res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
-      res.setHeader('Access-Control-Max-Age', '86400');
-    }
-    if (res && typeof res.status === 'function') res.status(204).end();
-    return { status: 204 };
+  // El gateway NO pasa `res` al handler: le entrega (req, ctx) y serializa el RETORNO.
+  // CORS ya lo pone el gateway; aquí solo el 204 del preflight.
+  async handleChatOptions() {
+    return { status: 204, data: null };
   }
 
-  async handleHealthCheck(req, res) {
+  async handleHealthCheck() {
     const c = this.config || {};
     const proyectos = c.proyectos || c.projects || {};
     const estados = Object.entries(proyectos).map(([id, v]) => ({ project_id: id, activado: v?.activado === true, modo: v?.modo || 'sombra' }));
-    return this._json(res, 200, { status: 200, data: { version: this.version, proyectos: estados } });
+    return this._json(200, { version: this.version, proyectos: estados });
   }
 
   // ── salidas ────────────────────────────────────────────────────────────────
 
-  _json(res, status, body) {
-    try {
-      if (res && typeof res.status === 'function' && !res.headersSent) {
-        res.setHeader?.('Access-Control-Allow-Origin', '*');
-        res.setHeader?.('Cache-Control', 'no-store');
-        return res.status(status).json(body);
-      }
-    } catch (_) { /* ignore */ }
-    return { status, ...body };
+  // Forma que entiende el gateway: `{status, data}` se respeta tal cual (incluido el 4xx).
+  _json(status, body) {
+    return { status, data: body };
   }
 
-  // SSE: el formato que la PWA ya sabe consumir (token/token/... + accion* + fin).
-  _sse(res, { texto, acciones, fin }) {
-    try {
-      if (res && typeof res.writeHead === 'function' && !res.headersSent) {
-        res.writeHead(200, {
-          'Content-Type': 'text/event-stream; charset=utf-8',
-          'Cache-Control': 'no-cache, no-transform',
-          'Connection': 'keep-alive',
-          'Access-Control-Allow-Origin': '*',
-          'X-Accel-Buffering': 'no'
-        });
-        const enviar = (evento, data) => res.write(`event: ${evento}\ndata: ${JSON.stringify(data)}\n\n`);
-        for (const trozo of String(texto).match(/[\s\S]{1,24}/g) || []) enviar('token', { t: trozo });
-        for (const a of (acciones || [])) enviar('accion', a);
-        enviar('fin', fin);
-        res.end();
-        return;
+  // SSE: el gateway lo detecta por `_responseType:'sse'` y llama `onConnect(res)` con el
+  // response HTTP REAL. Escribir en el `res` del handler no servía: nunca llega.
+  _sse({ texto, acciones, fin }) {
+    return {
+      status: 200,
+      data: {
+        _responseType: 'sse',
+        onConnect: (res) => {
+          try {
+            const enviar = (evento, data) => res.write(`event: ${evento}\ndata: ${JSON.stringify(data)}\n\n`);
+            for (const trozo of String(texto).match(/[\s\S]{1,24}/g) || []) enviar('token', { t: trozo });
+            for (const a of (acciones || [])) enviar('accion', a);
+            enviar('fin', fin);
+          } catch (err) {
+            this.logger?.error('portero.sse.failed', { error: err.message });
+          }
+          try { res.end(); } catch (_) { /* ignore */ }
+        }
       }
-    } catch (err) {
-      this.logger?.error('portero.sse.failed', { error: err.message });
-    }
-    return { status: 200, data: { texto, acciones, fin } };
+    };
   }
 }
 

@@ -71,6 +71,11 @@ class PedidosModule extends BaseModule {
     this.uiHandler = core.uiHandler;
     this.moduleRegistry = core.moduleRegistry;   // para crear cuentas vía cuentas.handleCreateCuenta
     this.config = core.config || null;
+    // RPC entre módulos (uiHandler directo). Se usa para resolver el nombre de la cuenta
+    // al nacer el pedido: el nombre es un dato del HECHO y hasta hoy solo vivía en la
+    // cuenta, obligando a cada consumidor (cocina, aviso, ticket, portero) a inventarse
+    // su propio fallback.
+    this.mqttRequest = core.mqttRequest;
 
     // Puerta única de la config de servicio (horario + interruptor). Un cierre puesto
     // por el dueño tiene que morder en segundos: caché corta, invalidada por
@@ -341,6 +346,11 @@ class PedidosModule extends BaseModule {
         existente.estado     = 'en_cocina';
         existente.project_id = existente.project_id || project_id || null;
         existente.ref_display = ref_display || existente.ref_display || null;
+        // El nombre es snapshot: si el pedido nació sin él (canal tienda) y ahora se
+        // conoce, se rellena UNA vez. Nunca se pisa un nombre ya congelado.
+        if (!existente.cliente_nombre) {
+          existente.cliente_nombre = data?.cliente_nombre || await this._nombreDeCuenta(cuenta_id) || null;
+        }
         // Los items de cocina son la verdad viva (nombre, precio, estructura); el shape
         // de origen (descripcion + centimos) se conserva para no dejar líneas mudas.
         existente.items = (items || []).map((item, idx) => {
@@ -505,12 +515,18 @@ class PedidosModule extends BaseModule {
 
       const pedido_id = crypto.randomUUID();
       const canal = this._detectarCanal(cuenta_id);
+      // Snapshot del nombre: el que venga como dato o, si falta, el de la cuenta ahora.
+      const cliente_nombre = data?.cliente_nombre || await this._nombreDeCuenta(cuenta_id);
 
       const pedido = {
         id: pedido_id,
         cuenta_id,
         canal,
         project_id: project_id || null,
+        // Copia del momento (no se sincroniza con rename): el hecho guarda quién pidió.
+        cliente_nombre: cliente_nombre || null,
+        cliente_telefono: data?.cliente_telefono || null,
+        cliente_jid: data?.cliente_jid || null,
         items: [],
         estado: 'borrador',
         subtotal: 0,
@@ -1403,6 +1419,25 @@ class PedidosModule extends BaseModule {
   // ==========================================
   // Event Publishers (canonicos via _publicarEvento)
   // ==========================================
+
+  /**
+   * Nombre del cliente en el momento de crear el pedido.
+   *
+   * SNAPSHOT, no sincronización: se copia UNA vez. Si mañana renombran o borran la cuenta,
+   * el pedido sigue diciendo quién pidió (el pedido es un hecho inmutable, como el precio).
+   * La cuenta sigue siendo la dueña del nombre VIVO; aquí solo se congela para operativa
+   * (cocina, aviso de listo, ticket, portero) sin obligar a cada consumidor a un join.
+   */
+  async _nombreDeCuenta(cuenta_id) {
+    if (!cuenta_id || typeof this.mqttRequest !== 'function') return null;
+    try {
+      const r = await this.mqttRequest('cuenta', 'get', { id: cuenta_id });
+      const c = r?.data?.cuenta || r?.data || null;
+      return c?.nombre || null;
+    } catch (_) {
+      return null;   // fail-open: sin nombre no se rompe el pedido
+    }
+  }
 
   async _publishPedidoCreado(pedido, sourcePayload) {
     const payload = {

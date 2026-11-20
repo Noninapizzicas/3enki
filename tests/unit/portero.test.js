@@ -248,6 +248,20 @@ test('modo vivo: sí emite la acción', async () => {
   assert.ok(evs.some(e => e.ev === 'accion' && e.data.producto_id === 'la_flota_port_royal'));
 });
 
+test('onLoad lee la config de modules_config.portero (no de la raíz)', async () => {
+  const m = new Portero();
+  const core = {
+    logger: { info: () => {}, warn: () => {}, error: () => {}, debug: () => {} },
+    metrics: { increment: () => {} },
+    eventBus: { publish: () => {}, subscribe: () => () => {} },
+    // Forma REAL del config del core: la config del módulo va anidada.
+    config: { modules_config: { portero: { proyectos: { 'the-pirate': { activado: true, modo: 'sombra' } } } } }
+  };
+  await m.onLoad(core);
+  assert.deepStrictEqual(m._cfgProyecto('the-pirate'), { activado: true, modo: 'sombra' });
+  assert.deepStrictEqual(m._cfgProyecto('otro'), {});
+});
+
 test('sin activado:true responde 404 y no atiende', async () => {
   const m = nuevo();
   m._cfgProyecto = () => ({});

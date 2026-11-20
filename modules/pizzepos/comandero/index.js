@@ -40,6 +40,9 @@ class ComanderoModule extends BaseModule {
 
     this.pedidos              = new Map();
     this.refDisplayCache      = new Map();
+    // Identidad operativa (aditivo): lo que viaja a cocina junto al ref_display.
+    this.numeroPedidoCache    = new Map();
+    this.clienteCache         = new Map();
     // Cache del catálogo BASE: Map<project_id, Map<producto_id, producto>>.
     // Era un Map PLANO, sin proyecto y sin purga: cada catalogo.actualizado solo hacía .set(),
     // así que los productos de otra carta u otro proyecto se acumulaban (el POS llegó a declarar
@@ -195,14 +198,18 @@ class ComanderoModule extends BaseModule {
 
   async onCuentaCreada(event) {
     const data = this._unwrap(event);
-    const { cuenta_id, ref_display } = data;
+    const { cuenta_id, ref_display, numero_pedido, cliente_nombre } = data;
     if (cuenta_id && ref_display) this.refDisplayCache.set(cuenta_id, ref_display);
+    if (cuenta_id && numero_pedido) this.numeroPedidoCache.set(cuenta_id, numero_pedido);
+    if (cuenta_id && cliente_nombre) this.clienteCache.set(cuenta_id, cliente_nombre);
   }
 
   async onCuentaActualizada(event) {
     const data = this._unwrap(event);
     const { cuenta_id, cambios } = data;
     if (cuenta_id && cambios?.ref_display) this.refDisplayCache.set(cuenta_id, cambios.ref_display);
+    if (cuenta_id && cambios?.numero_pedido) this.numeroPedidoCache.set(cuenta_id, cambios.numero_pedido);
+    if (cuenta_id && cambios?.cliente_nombre) this.clienteCache.set(cuenta_id, cambios.cliente_nombre);
   }
 
   async onCajaCerrada(event) {
@@ -787,6 +794,10 @@ class ComanderoModule extends BaseModule {
         pedido_id,
         project_id,
         ref_display:     this.refDisplayCache.get(cuenta_id) || null,
+        // Identidad operativa: cocina recibe el número de pedido y el cliente por
+        // separado, sin tener que descomponer el ref_display.
+        numero_pedido:   this.numeroPedidoCache.get(cuenta_id) || null,
+        cliente_nombre:  this.clienteCache.get(cuenta_id) || null,
         items:           itemsParaEnviar,
         total:           totalEnviado,
         notas_generales: (typeof data.notas_generales === 'string' && data.notas_generales.trim())

@@ -160,7 +160,7 @@ class AvisoPedidoListoModule extends BaseModule {
         project_id, cuenta_id,
         pedido_id: data.pedido_id || null,
         ref_display: this._refCorta(cuenta, data),
-        cliente_nombre: datos.cliente_nombre || cuenta.nombre || null,
+        cliente_nombre: datos.cliente_nombre || cuenta.cliente_nombre || cuenta.nombre || null,
         motivo: 'sin_contacto'
       }, event);
       return;
@@ -173,14 +173,14 @@ class AvisoPedidoListoModule extends BaseModule {
         project_id, cuenta_id,
         pedido_id: data.pedido_id || null,
         ref_display: this._refCorta(cuenta, data),
-        cliente_nombre: datos.cliente_nombre || cuenta.nombre || null,
+        cliente_nombre: datos.cliente_nombre || cuenta.cliente_nombre || cuenta.nombre || null,
         motivo: puente.motivo
       }, event);
       return;
     }
     const cfg = puente.cfg;
 
-    const nombre = datos.cliente_nombre || cuenta.nombre || null;
+    const nombre = datos.cliente_nombre || cuenta.cliente_nombre || cuenta.nombre || null;
     const ref = this._refCorta(cuenta, data);
 
     // Lo que el cliente necesita para VENIR: donde recoge y como llegar. Se leen en

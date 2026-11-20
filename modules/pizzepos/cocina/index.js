@@ -57,6 +57,10 @@ class CocinaModule extends BaseModule {
     this.pedidosActivos = new Map();
     this.historial = [];
     this.cuentaNombres = new Map();
+    // Identidad operativa por cuenta (aditivo): número de pedido y cliente, separados.
+    // `cuentaNombres` sigue siendo el display de compatibilidad.
+    this.cuentaNumeros = new Map();
+    this.cuentaClientes = new Map();
     this.tiemposPreparacion = [];
     this.tiposEstacion = { ...TIPOS_ESTACION };
     this.devices = new Map();
@@ -118,6 +122,8 @@ class CocinaModule extends BaseModule {
     this.tiemposPreparacion = [];
     this.devices.clear();
     this.cuentaNombres.clear();
+    this.cuentaNumeros.clear();
+    this.cuentaClientes.clear();
 
     this.logger.info('module.unloaded', { module: this.name });
   }
@@ -366,22 +372,33 @@ class CocinaModule extends BaseModule {
     if (!data?.cuenta_id) return;
     const display = data.ref_display || data.metadata?.nombre || data.nombre || null;
     if (display) this.cuentaNombres.set(data.cuenta_id, display);
+    if (data.numero_pedido) this.cuentaNumeros.set(data.cuenta_id, data.numero_pedido);
+    if (data.cliente_nombre) this.cuentaClientes.set(data.cuenta_id, data.cliente_nombre);
   }
 
   async onCuentaActualizada(event) {
     const data = event?.data || event?.payload || event;
     if (!data?.cuenta_id) return;
 
-    const display = data.cambios?.ref_display || data.cambios?.nombre || null;
-    if (!display) return;
+    const cambios = data.cambios || {};
+    if (cambios.numero_pedido) this.cuentaNumeros.set(data.cuenta_id, cambios.numero_pedido);
+    if (cambios.cliente_nombre) this.cuentaClientes.set(data.cuenta_id, cambios.cliente_nombre);
 
-    this.cuentaNombres.set(data.cuenta_id, display);
+    const display = cambios.ref_display || cambios.nombre || null;
+    if (display) this.cuentaNombres.set(data.cuenta_id, display);
+
+    // Un cambio SOLO de cliente/número también debe refrescar la comanda viva: antes el
+    // return temprano por falta de display lo dejaba fuera.
+    if (!display && !cambios.cliente_nombre && !cambios.numero_pedido) return;
 
     for (const pedido of this.pedidosActivos.values()) {
-      if (pedido.cuenta_id === data.cuenta_id) {
+      if (pedido.cuenta_id !== data.cuenta_id) continue;
+      if (display) {
         pedido.nombre_cuenta = display;
         pedido.ref_display = display;
       }
+      if (cambios.cliente_nombre) pedido.cliente_nombre = cambios.cliente_nombre;
+      if (cambios.numero_pedido) pedido.numero_pedido = cambios.numero_pedido;
     }
   }
 
@@ -391,6 +408,8 @@ class CocinaModule extends BaseModule {
     if (!cuenta_id) return;
 
     this.cuentaNombres.delete(cuenta_id);
+    this.cuentaNumeros.delete(cuenta_id);
+    this.cuentaClientes.delete(cuenta_id);
 
     let removed = 0;
     for (const [pedido_id, pedido] of this.pedidosActivos) {
@@ -418,6 +437,8 @@ class CocinaModule extends BaseModule {
       limpiados = this.pedidosActivos.size;
       this.pedidosActivos.clear();
       this.cuentaNombres.clear();
+      this.cuentaNumeros.clear();
+      this.cuentaClientes.clear();
       this.historial = [];
     } else {
       const slug = await this._slugProyecto(projectId);
@@ -467,6 +488,12 @@ class CocinaModule extends BaseModule {
 
       const nombre_cuenta = ref_display || this.cuentaNombres.get(cuenta_id) || metadata?.nombre || null;
       if (cuenta_id && ref_display) this.cuentaNombres.set(cuenta_id, ref_display);
+      // Identidad operativa: llega en el evento o del mapa de la cuenta. Se guarda tal cual
+      // (sin recomponerla desde ref_display) para que la comanda tenga los dos campos.
+      const numero_pedido = data.numero_pedido || this.cuentaNumeros.get(cuenta_id) || null;
+      const cliente_nombre = data.cliente_nombre || this.cuentaClientes.get(cuenta_id) || null;
+      if (cuenta_id && data.numero_pedido) this.cuentaNumeros.set(cuenta_id, data.numero_pedido);
+      if (cuenta_id && data.cliente_nombre) this.cuentaClientes.set(cuenta_id, data.cliente_nombre);
 
       // RED DE SALIDA (defensa en profundidad): una linea sin nombre no es accionable en cocina
       // (es la "fila fantasma" del autoservicio). Se descarta PERO con rastro — nunca en silencio
@@ -488,6 +515,9 @@ class CocinaModule extends BaseModule {
         pedido_id,
         cuenta_id,
         nombre_cuenta,
+        // Campos separados (aditivo). El display de siempre sigue en nombre_cuenta.
+        numero_pedido,
+        cliente_nombre,
         ref_display: nombre_cuenta,
         canal: canal || null,
         items: itemsCocina,

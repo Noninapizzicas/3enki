@@ -304,6 +304,51 @@ test('sin activado:true responde 404 y no atiende', async () => {
   assert.strictEqual(r.data.error.code, 'NOT_FOUND');
 });
 
+// ── identidad del cliente ───────────────────────────────────────────────────
+
+const CTX_PEDIDO = {
+  productos: [],
+  pedidos: [{ cuenta_id: 'llevar_1', cliente_nombre: 'Mijael', numero_pedido: 'L 527', estado: 'en_cocina', created_at: '2026-11-20T14:00:00Z' }]
+};
+
+test('estado_pedido con cuenta_id: responde sin preguntar el nombre', () => {
+  const m = nuevo();
+  const r = m.responder('estado_pedido', {}, CTX_PEDIDO, '¿cómo va mi pedido?', { nombre: null, cuenta_id: 'llevar_1' });
+  assert.strictEqual(r.resuelto, true);
+  assert.ok(r.texto.startsWith('Mijael, tu pedido'), r.texto);
+  assert.ok(r.texto.includes('en cocina'), r.texto);
+});
+
+test('sin cuenta_id ni nombre: pregunta (no adivina)', () => {
+  const m = nuevo();
+  const r = m.responder('estado_pedido', {}, CTX_PEDIDO, '¿cómo va mi pedido?', { nombre: null, cuenta_id: null });
+  assert.strictEqual(r.resuelto, false);
+  assert.ok(/nombre/i.test(r.texto));
+});
+
+test('sesión: el nombre dicho se recuerda para el turno siguiente', () => {
+  const m = nuevo();
+  const s = m._sesion('s1');
+  s.esperando = 'nombre';
+  assert.strictEqual(m._sesion('s1').esperando, 'nombre');
+  m._sesion('s1').nombre = 'Mijael';
+  assert.strictEqual(m._sesion('s1').nombre, 'Mijael');
+});
+
+test('"soy Mijael" se extrae; "soy el asistente" no', () => {
+  const m = nuevo();
+  assert.strictEqual(m._nombreDicho('hola, soy Mijael'), 'Mijael');
+  assert.strictEqual(m._nombreDicho('me llamo Mijael Rodas'), 'Mijael Rodas');
+  assert.strictEqual(m._nombreDicho('soy el asistente'), null);
+});
+
+test('respuesta a "¿con qué nombre?": un nombre sí, una frase no', () => {
+  const m = nuevo();
+  assert.strictEqual(m._posibleNombre('Mijael'), 'Mijael');
+  assert.strictEqual(m._posibleNombre('¿cuánto cuesta la pizza?'), null);
+  assert.strictEqual(m._posibleNombre('pedido'), null);
+});
+
 // ── runner ──────────────────────────────────────────────────────────────────
 
 (async () => {

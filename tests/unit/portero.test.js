@@ -386,6 +386,25 @@ test('contrato: todo evento publicado está declarado en module.json (y al revé
   for (const ev of declarados) assert.ok(publicados.has(ev), `evento declarado que no se publica: ${ev}`);
 });
 
+test('sesión: contestar el nombre NO cae en "No te he entendido"', async () => {
+  const m = nuevo();
+  const respuestas = [];
+  m.eventBus = { publish: async (n, p) => { if (n === 'portero.respuesta') respuestas.push(p); } };
+  m._cfgProyecto = () => ({ activado: true, modo: 'sombra' });
+  m._contexto = async () => ({
+    carta: { productos: [] }, productos: [], opciones: {}, servicio: null,
+    pedidos: [{ cuenta_id: 'llevar_1', cliente_nombre: 'Mijael', estado: 'en_cocina', created_at: '2026-11-20T14:00:00Z' }]
+  });
+
+  await m.handleChatPost({ body: { project_id: 'the-pirate', message: '¿cómo va mi pedido?', sesion_id: 's9' } });
+  await m.handleChatPost({ body: { project_id: 'the-pirate', message: 'Mijael', sesion_id: 's9' } });
+
+  const ult = respuestas[respuestas.length - 1];
+  assert.strictEqual(ult.intencion, 'estado_pedido', 'la respuesta al nombre debe continuar la pregunta anterior');
+  assert.strictEqual(ult.resuelto, true);
+  assert.ok(ult.texto.includes('en cocina'), ult.texto);
+});
+
 // ── runner ──────────────────────────────────────────────────────────────────
 
 (async () => {

@@ -427,11 +427,21 @@ class PorteroModule extends BaseModule {
     // pedir: si ya está ahí, volver a pedirlo es hacerle repetir lo que ya dijo.
     const sesion = this._sesion(sesion_id);
     let nombre = body.nombre || sesion.nombre || null;
+    let intencionPendiente = null;
     const dicho = this._nombreDicho(message);
     if (dicho) { nombre = dicho; sesion.nombre = dicho; sesion.esperando = null; }
     if (!nombre && sesion.esperando === 'nombre') {
       const posible = this._posibleNombre(message);
-      if (posible) { nombre = posible; sesion.nombre = posible; sesion.esperando = null; }
+      if (posible) {
+        nombre = posible;
+        sesion.nombre = posible;
+        // La respuesta al "¿con qué nombre?" NO es una pregunta nueva: es la continuación
+        // de la anterior. Sin esto, "Mijael" se clasificaba como intención desconocida y el
+        // cliente recibía "No te he entendido" después de haber contestado lo que se le pidió.
+        intencionPendiente = sesion.intencion_pendiente || 'estado_pedido';
+        sesion.esperando = null;
+        sesion.intencion_pendiente = null;
+      }
     }
 
     let ctx, intencion = 'desconocida', respuesta;
@@ -452,13 +462,16 @@ class PorteroModule extends BaseModule {
       if (!ctx?.carta) {
         respuesta = { resuelto: false, texto: 'No puedo consultar la carta ahora mismo. Inténtalo en un momento.', acciones: [] };
       } else {
-        const c = this.clasificar(message, ctx.productos);
+        const c = intencionPendiente
+          ? { intencion: intencionPendiente, args: {} }
+          : this.clasificar(message, ctx.productos);
         intencion = c.intencion;
         respuesta = this.responder(intencion, c.args, ctx, message, { nombre, cuenta_id });
         // Si la respuesta se quedó corta por no saber quién es, se pide UNA vez y se
-        // recuerda para el siguiente turno.
+        // recuerda para el siguiente turno — incluida la intención que quedó a medias.
         if (!respuesta.resuelto && !nombre && (intencion === 'estado_pedido' || intencion === 'tiempo')) {
           sesion.esperando = 'nombre';
+          sesion.intencion_pendiente = intencion;
         }
       }
     } catch (err) {

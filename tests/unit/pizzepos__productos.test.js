@@ -46,6 +46,24 @@ function cartaFixture() {
   };
 }
 
+// Familia/subfamilia (forma the-pirate v142): `pizzas` y `la_flota` son la MISMA familia
+// (`categorias[].tipo = 'pizzas'`); `el_fardel` es de otra ('bocatas'). El tipo es DATO de la carta.
+function cartaFamiliaPizza() {
+  return {
+    meta: { id: 'carta_pirata', nombre: 'The Pirate', version: 142, estado: 'en_servicio' },
+    categorias: [
+      { id: 'pizzas', nombre: 'Pizzas Puerto Seguro', orden: 1, tipo: 'pizzas' },
+      { id: 'la_flota', nombre: 'La Flota', orden: 2, tipo: 'pizzas' },
+      { id: 'el_fardel', nombre: 'El Fardel', orden: 3, tipo: 'bocatas' }
+    ],
+    productos: [
+      { id: 'pizzas_port_royal', nombre: 'Port Royal', precio: 12, categoria_id: 'pizzas' },
+      { id: 'flota_mahon', nombre: 'Mahón', precio: 12, categoria_id: 'la_flota' },
+      { id: 'fardel_barbanegra', nombre: 'Barbanegra', precio: 8, categoria_id: 'el_fardel' }
+    ]
+  };
+}
+
 // Bus mock: simula el carta-manager reflejo respondiendo a los RPC del proyector.
 // fixtures = { cartas: { <id>: carta }, listByProject: { <pid>: [{id,estado}] } }
 function makeBus(fixtures = {}) {
@@ -228,6 +246,21 @@ const publishedOf = (mocks, name) => mocks.eventBus.published.filter(p => p[0] =
     const r = await m.handleListPizzas({ project_id: 'proj-nonina' });
     assert.strictEqual(r.data.pizzas.length, 1);
     assert.strictEqual(r.data.pizzas[0].id, 'pizza_bachata');
+  });
+
+  await testAsync('pizzas por FAMILIA: la_flota entra por categorias[].tipo, el_fardel no', async () => {
+    // the-pirate: `pizzas` y `la_flota` comparten familia (tipo 'pizzas'); `el_fardel` es 'bocatas'.
+    // El panel de mitad y mitad pedía pizzas y se servía del NOMBRE de la categoría: "La Flota" no
+    // empieza por "pizz", así que sus 5 fichas no se ofrecían.
+    const fxPirata = {
+      cartas: { carta_pirata: cartaFamiliaPizza() },
+      listByProject: { 'proj-pirata': [{ id: 'carta_pirata', estado: 'en_servicio' }] }
+    };
+    const m = await instantiate(makeMocks(fxPirata));
+    const r = await m.handleListPizzas({ project_id: 'proj-pirata' });
+    assert.strictEqual(r.status, 200);
+    assert.deepStrictEqual(r.data.pizzas.map(p => p.id).sort(), ['flota_mahon', 'pizzas_port_royal']);
+    assert.strictEqual(r.data.total, 2);
   });
 
   // Group 4: Aislamiento (el leak muere)

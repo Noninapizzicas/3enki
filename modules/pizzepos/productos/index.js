@@ -28,7 +28,7 @@ class ProductosModule extends BaseModule {
   constructor() {
     super();
     this.name = 'productos';
-    this.version = '5.3.2';
+    this.version = '5.3.4';
 
     // Dependencias (inyectadas en onLoad)
     this.uiHandler = null;
@@ -865,14 +865,30 @@ class ProductosModule extends BaseModule {
       const { project_id, canal, carta_id } = data || {};
       if (!project_id) return this._errorResponse(400, 'INVALID_INPUT', 'project_id es requerido', { field: 'project_id' });
       const carta = await this._cartaActiva(project_id, canal, carta_id);
-      const productos = carta ? this._proyectar(carta).productos : [];
+      const { categorias, productos } = carta ? this._proyectar(carta) : { categorias: [], productos: [] };
+      // La pizza se reconoce por FAMILIA (DATO de la carta: categorias[].tipo), no por el nombre de la
+      // subfamilia. `la_flota` ("La Flota") no lleva /pizz/ en id ni nombre y se quedaba fuera del panel
+      // de mitad y mitad. El conjunto AMPLÍA, nunca encoge: familia declarada + los matches legacy.
+      const catsFamiliaPizza = new Set();
+      for (const c of categorias) {
+        const porTipo = /^pizz/.test(String(c.tipo || '').toLowerCase());
+        const porNombre = String(c.id || '').toLowerCase().startsWith('pizz') ||
+                          String(c.nombre || '').toLowerCase().startsWith('pizz');
+        if (porTipo || porNombre) {
+          if (c.id) catsFamiliaPizza.add(String(c.id).toLowerCase());
+          if (c.nombre) catsFamiliaPizza.add(String(c.nombre).toLowerCase());
+        }
+      }
+      const esPizza = (p) => {
+        if (p.activo === false) return false;
+        if (p.tipo === 'pizza') return true;
+        const cat = String(p.categoria || '').toLowerCase();
+        const catId = String(p.categoria_id || '').toLowerCase();
+        if (cat.startsWith('pizz') || catId.startsWith('pizz')) return true;
+        return catsFamiliaPizza.has(cat) || catsFamiliaPizza.has(catId);
+      };
       const pizzas = productos
-        .filter(p =>
-          p.activo !== false && (
-            (p.categoria && p.categoria.toLowerCase().startsWith('pizz')) ||
-            (p.categoria_id && p.categoria_id.toLowerCase().startsWith('pizz')) ||
-            p.tipo === 'pizza'
-          ))
+        .filter(esPizza)
         .sort((a, b) => (a.nombre || '').localeCompare(b.nombre || ''));
       return { status: 200, data: { project_id, pizzas, total: pizzas.length, carta_id: carta_id || carta?.meta?.id || null } };
     } catch (err) {

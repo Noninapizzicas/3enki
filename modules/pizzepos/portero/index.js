@@ -257,6 +257,27 @@ class PorteroModule extends BaseModule {
     } catch (_) { return `a las ${prox.desde}`; }
   }
 
+  // Los datos de la carta NO se copian: se preguntan a su dueño por el bus.
+  // `productos.categorias` es la fuente de las secciones (categorias.list devuelve 0).
+  async _secciones(project_id) {
+    const r = await this._ui('productos', 'categorias', { project_id });
+    const d = this._cuerpo(r, 'categorias');
+    return Array.isArray(d?.categorias) ? d.categorias : [];
+  }
+
+  async _productosDelProyecto(project_id) {
+    const r = await this._ui('productos', 'list', { project_id });
+    const d = this._cuerpo(r, 'productos');
+    return Array.isArray(d?.productos) ? d.productos : [];
+  }
+
+  async _buscarEnProductos(project_id, q) {
+    if (!q) return [];
+    const r = await this._ui('productos', 'search', { project_id, q });
+    const d = this._cuerpo(r, 'resultados');
+    return Array.isArray(d?.resultados) ? d.resultados : [];
+  }
+
   responder(intencion, args, ctx, textoOriginal = '', extra = {}) {
     const productos = ctx.productos || [];
     const porNombre = n => this._productoEn(n, productos);
@@ -348,17 +369,25 @@ class PorteroModule extends BaseModule {
 
       case 'carta': {
         if (!productos.length) return { resuelto: false, texto: 'No puedo consultar la carta ahora mismo. Inténtalo en un momento.', acciones: [] };
-        const cats = new Map((ctx.carta?.categorias || []).map(c => [c.id, c.nombre || c.id]));
+        // Secciones ORDENADAS por su dueño (`productos.categorias`), no por mi criterio.
+        const secciones = Array.isArray(ctx.secciones) ? ctx.secciones.slice().sort((a, b) => (a.orden || 0) - (b.orden || 0)) : [];
+        const porId = new Map(secciones.map(s => [s.id, s]));
         const grupos = new Map();
         for (const p of productos) {
-          const cat = cats.get(p.categoria_id) || p.categoria || 'la carta';
-          if (!grupos.has(cat)) grupos.set(cat, []);
-          grupos.get(cat).push(p);
+          const sec = porId.get(p.categoria_id);
+          const clave = sec ? sec.id : (p.categoria_id || p.categoria || '_');
+          if (!grupos.has(clave)) grupos.set(clave, {
+            nombre: sec?.nombre || p.categoria || 'la carta',
+            // `|| 99` convertiría el orden 0 (La Flota) en 99 y la mandaría al final.
+            orden: Number.isFinite(sec?.orden) ? sec.orden : 99,
+            lista: []
+          });
+          grupos.get(clave).lista.push(p);
         }
         const partes = [];
-        for (const [cat, lista] of [...grupos].slice(0, 4)) {
-          const nombres = lista.slice(0, 3).map(p => p.nombre).join(', ');
-          partes.push(`${cat}: ${nombres}${lista.length > 3 ? ` y ${lista.length - 3} más` : ''}`);
+        for (const g of [...grupos.values()].sort((a, b) => a.orden - b.orden).slice(0, 4)) {
+          const nombres = g.lista.slice(0, 3).map(p => p.nombre).join(', ');
+          partes.push(`${g.nombre}: ${nombres}${g.lista.length > 3 ? ` y ${g.lista.length - 3} más` : ''}`);
         }
         return {
           resuelto: true,
@@ -379,9 +408,11 @@ class PorteroModule extends BaseModule {
         const q = this._norm(qOriginal);
         if (!q) return { resuelto: false, texto: '¿Qué ingrediente buscas?', acciones: [] };
         const palabras = q.split(' ').filter(x => x.length > 2);
-        // Los ingredientes pueden venir como string o como {nombre} en la carta real.
+        // Si el dueño ya buscó (`productos.search`), se usa SU resultado. El filtro local
+        // queda solo como fallback si el bus no contesta.
+        const encontrados = Array.isArray(ctx.encontrados) ? ctx.encontrados : null;
         const nombresIng = p => (p.ingredientes || []).map(i => typeof i === 'string' ? i : (i?.nombre || i?.id || ''));
-        const hits = productos.filter(p => {
+        const hits = encontrados || productos.filter(p => {
           const texto = this._norm([p.nombre, ...nombresIng(p), p.categoria].join(' '));
           return palabras.some(w => texto.includes(w));
         });
@@ -554,6 +585,17 @@ class PorteroModule extends BaseModule {
         // hace 30 s. Se recarga sin caché justo para estas dos intenciones.
         if (intencion === 'estado_pedido' || intencion === 'tiempo') {
           ctx = await this._contexto(project_id, { fresco: true });
+        }
+        // La carta y la búsqueda las dicta su dueño por el bus, no una copia local.
+        if (intencion === 'carta') {
+          const [secciones, lista] = await Promise.all([
+            this._secciones(project_id),
+            this._productosDelProyecto(project_id)
+          ]);
+          ctx = { ...ctx, secciones, productos: lista.length ? lista : ctx.productos };
+        } else if (intencion === 'buscar') {
+          const encontrados = await this._buscarEnProductos(project_id, c.args?.q || message);
+          ctx = { ...ctx, encontrados };
         }
         respuesta = this.responder(intencion, c.args, ctx, message, { nombre, cuenta_id });
         // Si la respuesta se quedó corta por no saber quién es, se pide UNA vez y se

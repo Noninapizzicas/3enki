@@ -257,18 +257,18 @@ class PorteroModule extends BaseModule {
     } catch (_) { return `a las ${prox.desde}`; }
   }
 
-  // Los datos de la carta NO se copian: se preguntan a su dueño por el bus.
-  // `productos.categorias` es la fuente de las secciones (categorias.list devuelve 0).
-  async _secciones(project_id) {
-    const r = await this._ui('productos', 'categorias', { project_id });
+  // La carta completa se pide en UN round-trip a su dueño. `productos.carta_completa`
+  // proyecta desde carta-manager (fuente única) y devuelve categorías + productos +
+  // ingredientes. `categorias.list` existe pero su catálogo está vacío en the-pirate:
+  // no es la fuente de las secciones.
+  async _cartaCompleta(project_id) {
+    const r = await this._ui('productos', 'carta_completa', { project_id });
     const d = this._cuerpo(r, 'categorias');
-    return Array.isArray(d?.categorias) ? d.categorias : [];
-  }
-
-  async _productosDelProyecto(project_id) {
-    const r = await this._ui('productos', 'list', { project_id });
-    const d = this._cuerpo(r, 'productos');
-    return Array.isArray(d?.productos) ? d.productos : [];
+    return {
+      secciones: Array.isArray(d?.categorias) ? d.categorias : [],
+      productos: Array.isArray(d?.productos) ? d.productos : [],
+      ingredientes: Array.isArray(d?.ingredientes) ? d.ingredientes : []
+    };
   }
 
   async _buscarEnProductos(project_id, q) {
@@ -588,11 +588,8 @@ class PorteroModule extends BaseModule {
         }
         // La carta y la búsqueda las dicta su dueño por el bus, no una copia local.
         if (intencion === 'carta') {
-          const [secciones, lista] = await Promise.all([
-            this._secciones(project_id),
-            this._productosDelProyecto(project_id)
-          ]);
-          ctx = { ...ctx, secciones, productos: lista.length ? lista : ctx.productos };
+          const completa = await this._cartaCompleta(project_id);
+          ctx = { ...ctx, secciones: completa.secciones, productos: completa.productos.length ? completa.productos : ctx.productos };
         } else if (intencion === 'buscar') {
           const encontrados = await this._buscarEnProductos(project_id, c.args?.q || message);
           ctx = { ...ctx, encontrados };

@@ -501,7 +501,7 @@ test('buscar: si el bus ya devolvió resultados, se usan los suyos (no el fallba
   assert.ok(!r.texto.includes('Nassau'), 'no mezcla el filtro local con el resultado del dueño');
 });
 
-test('carta: handleChatPost pregunta a productos por el bus', async () => {
+test('carta: handleChatPost pide la carta completa en UN round-trip', async () => {
   const m = nuevo();
   const llamadas = [];
   m.eventBus = { publish: async () => {} };
@@ -509,13 +509,16 @@ test('carta: handleChatPost pregunta a productos por el bus', async () => {
   m._contexto = async () => ({ carta: { productos: [] }, productos: [], pedidos: [], opciones: {}, servicio: null });
   m._ui = async (d, a) => {
     llamadas.push(`${d}.${a}`);
-    if (a === 'categorias') return { data: { categorias: [{ id: 'pizzas', nombre: 'Pizzas Puerto Seguro', orden: 1 }] } };
-    if (a === 'list') return { data: { productos: [{ nombre: 'Mahón', precio: 12, categoria_id: 'pizzas' }] } };
+    if (a === 'carta_completa') return { data: {
+      categorias: [{ id: 'pizzas', nombre: 'Pizzas Puerto Seguro', orden: 0 }],
+      productos: [{ nombre: 'Mahón', precio: 12, categoria_id: 'pizzas' }],
+      ingredientes: []
+    } };
     return { data: {} };
   };
   await m.handleChatPost({ body: { project_id: 'the-pirate', message: 'dime la carta' } });
-  assert.ok(llamadas.includes('productos.categorias'), 'secciones: ' + llamadas.join(','));
-  assert.ok(llamadas.includes('productos.list'), 'productos: ' + llamadas.join(','));
+  assert.ok(llamadas.includes('productos.carta_completa'), llamadas.join(','));
+  assert.ok(!llamadas.includes('categorias.list'), 'no se usa el catálogo vacío: ' + llamadas.join(','));
 });
 
 test('carta: una sección con orden 0 no se manda al final', () => {

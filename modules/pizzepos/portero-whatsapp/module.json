@@ -1,7 +1,7 @@
 {
   "_doc": "EL ACOPLE, no otro bot. El puente de WhatsApp ya escucha, deduplica y envía; este módulo solo une el mensaje que ya llega por el bus con el portero, que es la inteligencia del comercio (carta real, precios reales, estado real del pedido). Sin LLM en esta capa: el portero no inventa. Nace apagado por proyecto y no contesta a un SÍ/NO corto, que pertenece a confirmacion-pedido.",
   "name": "portero-whatsapp",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Acople entre el puente de WhatsApp y el portero: recibe whatsapp.mensaje.recibido, resuelve la cuenta por el teléfono, pregunta al portero y devuelve la respuesta por el /send del puente. No rehace el bot.",
   "author": "Event Core Team",
   "language": "es",
@@ -34,5 +34,6 @@
     ]
   },
   "tools": [],
-  "_v0_1_1_nota": "v0.1.1 (2026-11-21): TRAZAS. El handler retornaba en silencio en cada filtro, así que en producción no se podía saber si el problema era \"no llega el evento\", \"proyecto apagado\", \"repetido\" o \"el portero falla\". Ahora loguea portero-whatsapp.entrada, .ignorado (con motivo), .consultando, .respuesta (intención, chars, motivo) y los errores reales del portero y del puente con su mensaje."
+  "_v0_1_1_nota": "v0.1.1 (2026-11-21): TRAZAS. El handler retornaba en silencio en cada filtro, así que en producción no se podía saber si el problema era \"no llega el evento\", \"proyecto apagado\", \"repetido\" o \"el portero falla\". Ahora loguea portero-whatsapp.entrada, .ignorado (con motivo), .consultando, .respuesta (intención, chars, motivo) y los errores reales del portero y del puente con su mensaje.",
+  "_v0_1_2_nota": "v0.1.2 (2026-11-21): EL NOMBRE DEL MÓDULO. BaseModule trae `this.name = \"base\"` y cada módulo debe sobrescribirlo; este no lo hacía, así que leía `modules_config.base` (vacío) y se creía apagado aunque estuviera configurado. Verificado en producción: la traza daba `ignorado motivo=proyecto_apagado` con el config correcto. Ahora el constructor fija name y version, y hay un test que lo guarda."
 }

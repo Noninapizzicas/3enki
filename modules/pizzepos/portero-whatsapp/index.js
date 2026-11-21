@@ -37,6 +37,15 @@ const SI_NO = new Set(['si', 'sii', 'siii', 'ok', 'okei', 'okey', 'vale', 'confi
   'anulalo', 'dejalo', 'olvidalo']);
 
 class PorteroWhatsapp extends BaseModule {
+  constructor() {
+    super();
+    // CRÍTICO: BaseModule trae `name = 'base'`. Sin esto, `modules_config[this.name]`
+    // apunta a `base` (vacío) y el módulo se cree apagado aunque esté configurado.
+    this.name = 'portero-whatsapp';
+    this.version = require('./module.json').version;
+    this.config = null;
+  }
+
   async onLoad(core) {
     this.logger = core.logger;
     this.metrics = core.metrics;

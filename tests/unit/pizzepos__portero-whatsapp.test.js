@@ -131,6 +131,23 @@ test('contrato: los eventos publicados están declarados y al revés', () => {
   for (const ev of declarados) assert.ok(publicados.has(ev), `evento declarado sin publicar: ${ev}`);
 });
 
+test('constructor: el nombre es portero-whatsapp, no el "base" de BaseModule', () => {
+  const m = new PorteroWhatsapp();
+  assert.strictEqual(m.name, 'portero-whatsapp', 'sin esto se lee modules_config.base y el módulo se cree apagado');
+});
+
+test('onLoad lee modules_config[portero-whatsapp] y queda activado', async () => {
+  const m = new PorteroWhatsapp();
+  m.logger = { info: () => {}, warn: () => {}, error: () => {}, debug: () => {} };
+  m.metrics = { increment: () => {}, gauge: () => {}, timing: () => {} };
+  m.eventBus = { publish: async () => {} };
+  await m.onLoad({
+    logger: m.logger, metrics: m.metrics, eventBus: m.eventBus,
+    config: { modules_config: { 'portero-whatsapp': { proyectos: { 'the-pirate': { activado: true } } } } }
+  });
+  assert.strictEqual(m._cfgProyecto('the-pirate').activado, true);
+});
+
 (async () => {
   let passed = 0; const fails = [];
   for (const { name, fn } of tests) {

@@ -28,7 +28,7 @@ class ProductosModule extends BaseModule {
   constructor() {
     super();
     this.name = 'productos';
-    this.version = '5.3.2';
+    this.version = '5.3.4';
 
     // Dependencias (inyectadas en onLoad)
     this.uiHandler = null;
@@ -865,13 +865,24 @@ class ProductosModule extends BaseModule {
       const { project_id, canal, carta_id } = data || {};
       if (!project_id) return this._errorResponse(400, 'INVALID_INPUT', 'project_id es requerido', { field: 'project_id' });
       const carta = await this._cartaActiva(project_id, canal, carta_id);
-      const productos = carta ? this._proyectar(carta).productos : [];
-      const pizzas = productos
+      const proy = carta ? this._proyectar(carta) : { categorias: [], productos: [] };
+      // FAMILIA: la CARTA declara el tipo de cada categoría ("pizzas"), así que la pertenencia se lee
+      // de la familia y no del nombre de la categoría. La Flota se llama la_flota (su nombre no empieza
+      // por "pizz") y siendo familia pizzas se caía entera del mitad-y-mitad.
+      const esFamiliaPizza = (v) => String(v || '').toLowerCase().startsWith('pizz');
+      const catsPizza = new Set(
+        proy.categorias
+          .filter(c => esFamiliaPizza(c.tipo) || esFamiliaPizza(c.familia))
+          .map(c => c.id)
+      );
+      const pizzas = proy.productos
         .filter(p =>
           p.activo !== false && (
-            (p.categoria && p.categoria.toLowerCase().startsWith('pizz')) ||
-            (p.categoria_id && p.categoria_id.toLowerCase().startsWith('pizz')) ||
-            p.tipo === 'pizza'
+            catsPizza.has(p.categoria_id) ||
+            catsPizza.has(p.categoria) ||
+            esFamiliaPizza(p.categoria) ||
+            esFamiliaPizza(p.categoria_id) ||
+            esFamiliaPizza(p.tipo)
           ))
         .sort((a, b) => (a.nombre || '').localeCompare(b.nombre || ''));
       return { status: 200, data: { project_id, pizzas, total: pizzas.length, carta_id: carta_id || carta?.meta?.id || null } };

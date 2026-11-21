@@ -230,6 +230,29 @@ const publishedOf = (mocks, name) => mocks.eventBus.published.filter(p => p[0] =
     assert.strictEqual(r.data.pizzas[0].id, 'pizza_bachata');
   });
 
+  // La FAMILIA declarada en la carta manda: una categoría de familia "pizzas" que NO se llama
+  // "pizz*" (La Flota → la_flota) también entra en el mitad-y-mitad; otra familia no se cuela.
+  await testAsync('pizzas por FAMILIA: la_flota entra aunque no se llame "pizz*"; el_fardel no', async () => {
+    const carta = {
+      meta: { id: 'carta_pirata', nombre: 'The Pirate', estado: 'en_servicio' },
+      categorias: [
+        { id: 'pizzas', nombre: 'Pizzas Puerto Seguro', tipo: 'pizzas', orden: 1 },
+        { id: 'la_flota', nombre: 'La Flota', tipo: 'pizzas', orden: 2 },
+        { id: 'el_fardel', nombre: 'El Fardel', tipo: 'bocatas', orden: 3 }
+      ],
+      productos: [
+        { id: 'pizzas_nassau', nombre: 'Nassau', precio: 10, categoria_id: 'pizzas' },
+        { id: 'la_flota_mahon', nombre: 'Mahón', precio: 11, categoria_id: 'la_flota' },
+        { id: 'el_fardel_pirata', nombre: 'Pirata', precio: 9, categoria_id: 'el_fardel' }
+      ]
+    };
+    const fx = { cartas: { carta_pirata: carta }, listByProject: { 'the-pirate': [{ id: 'carta_pirata', estado: 'en_servicio' }] } };
+    const m = await instantiate(makeMocks(fx));
+    const r = await m.handleListPizzas({ project_id: 'the-pirate' });
+    assert.strictEqual(r.status, 200);
+    assert.deepStrictEqual(r.data.pizzas.map(p => p.id).sort(), ['la_flota_mahon', 'pizzas_nassau']);
+  });
+
   // Group 4: Aislamiento (el leak muere)
   await testAsync('SIN LEAK: proyecto sin carta → carta_completa 404, NO los datos de otro', async () => {
     // bus conoce la carta de nonina, pero pedimos proj-vacio (sin carta en su lista)

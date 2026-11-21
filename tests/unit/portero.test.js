@@ -386,6 +386,46 @@ test('contrato: todo evento publicado está declarado en module.json (y al revé
   for (const ev of declarados) assert.ok(publicados.has(ev), `evento declarado que no se publica: ${ev}`);
 });
 
+test('sesión: contestar el nombre NO cae en "No te he entendido"', async () => {
+  const m = nuevo();
+  const respuestas = [];
+  m.eventBus = { publish: async (n, p) => { if (n === 'portero.respuesta') respuestas.push(p); } };
+  m._cfgProyecto = () => ({ activado: true, modo: 'sombra' });
+  m._contexto = async () => ({
+    carta: { productos: [] }, productos: [], opciones: {}, servicio: null,
+    pedidos: [{ cuenta_id: 'llevar_1', cliente_nombre: 'Mijael', estado: 'en_cocina', created_at: '2026-11-20T14:00:00Z' }]
+  });
+
+  await m.handleChatPost({ body: { project_id: 'the-pirate', message: '¿cómo va mi pedido?', sesion_id: 's9' } });
+  await m.handleChatPost({ body: { project_id: 'the-pirate', message: 'Mijael', sesion_id: 's9' } });
+
+  const ult = respuestas[respuestas.length - 1];
+  assert.strictEqual(ult.intencion, 'estado_pedido', 'la respuesta al nombre debe continuar la pregunta anterior');
+  assert.strictEqual(ult.resuelto, true);
+  assert.ok(ult.texto.includes('en cocina'), ult.texto);
+});
+
+test('identidad: un pedido CANCELADO no es "tu pedido"', () => {
+  const m = nuevo();
+  const ctx = { pedidos: [
+    { cuenta_id: 'c1', cliente_nombre: 'Mijael', estado: 'cancelado', created_at: '2026-11-20T10:00:00Z' },
+    { cuenta_id: 'c2', cliente_nombre: 'Mijael', estado: 'en_cocina', created_at: '2026-11-20T14:00:00Z' }
+  ] };
+  const p = m._pedidoDeCliente(ctx, 'Mijael', null);
+  assert.strictEqual(p.cuenta_id, 'c2');
+  const r = m.responder('estado_pedido', {}, ctx, '¿cómo va mi pedido?', { nombre: 'Mijael', cuenta_id: null });
+  assert.ok(r.texto.includes('en cocina'), r.texto);
+});
+
+test('identidad: dos abiertos con el mismo nombre NO se adivinan', () => {
+  const m = nuevo();
+  const ctx = { pedidos: [
+    { cuenta_id: 'c1', cliente_nombre: 'Mijael', estado: 'en_cocina', created_at: '2026-11-20T14:00:00Z' },
+    { cuenta_id: 'c2', cliente_nombre: 'Mijael', estado: 'en_cocina', created_at: '2026-11-20T14:05:00Z' }
+  ] };
+  assert.strictEqual(m._pedidoDeCliente(ctx, 'Mijael', null), null);
+});
+
 // ── runner ──────────────────────────────────────────────────────────────────
 
 (async () => {

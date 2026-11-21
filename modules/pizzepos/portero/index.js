@@ -212,7 +212,27 @@ class PorteroModule extends BaseModule {
       return { intencion: 'que_lleva', args: conProducto };
     if (hay(/(oferta|descuento|promo|2x1|rebaja)/))
       return { intencion: 'ofertas', args: {} };
-    if (hay(/\b(ponme|dame|quiero|anademe|anademelo|marchando|pedir|una|uno|dos|tres)\b/))
+    // "ayuda", "cómo me puedes ayudar": qué sabe hacer el bot. Va antes que `carta`
+    // para que "ayuda con la carta" pida ayuda, no el menú entero.
+    if (hay(/\b(ayuda|ayudar|que puedes hacer|como me puedes ayudar|en que me puedes|para que sirves|que sabes hacer)\b/))
+      return { intencion: 'ayuda', args: {} };
+    // "dime la carta", "qué tenéis", "menú": la pregunta más obvia de un cliente y
+    // no existía. Va ANTES de pedir para que "la carta" no se confunda con un pedido.
+    if (hay(/\b(carta|menu|catalogo|que teneis|que hay|que pizzas|la carta|ver carta)\b/))
+      return { intencion: 'carta', args: {} };
+    // "pizzas con atún", "algo con bacon": búsqueda por nombre o ingrediente.
+    if (hay(/\b(pizza|pizzas|algo|plato|teneis|hay|tienes|busc)\b/)) {
+      const m = t.match(/\bcon\s+(.{3,24})$/);
+      if (m) {
+        // Se extrae del texto ORIGINAL para conservar la tilde ("atún", no "atun").
+        const mOrig = String(texto).match(/\bcon\s+(.{3,24})$/i);
+        return { intencion: 'buscar', args: { q: (mOrig ? mOrig[1] : m[1]).trim() } };
+      }
+    }
+    // `pedir` ESTRICTO: verbo de pedido, o "quiero/una/uno..." SOLO si hay producto.
+    // Antes "quiero preguntar" caía aquí y contestaba "Dime qué plato quieres".
+    if (hay(/\b(ponme|dame|anademe|anademelo|marchando|pideme|me pones|quiero pedir)\b/) ||
+        (producto && hay(/\b(quiero|una|uno|dos|tres)\b/)))
       return { intencion: 'pedir', args: { ...conProducto } };
     if (hay(/\b(hola|buenas|hey|buenos dias|buenas tardes|buenas noches)\b/))
       return { intencion: 'saludo', args: {} };
@@ -235,6 +255,27 @@ class PorteroModule extends BaseModule {
       const dias = ['domingo', 'lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado'];
       return `el ${dias[d.getUTCDay()]} a las ${prox.desde}`;
     } catch (_) { return `a las ${prox.desde}`; }
+  }
+
+  // La carta completa se pide en UN round-trip a su dueño. `productos.carta_completa`
+  // proyecta desde carta-manager (fuente única) y devuelve categorías + productos +
+  // ingredientes. `categorias.list` existe pero su catálogo está vacío en the-pirate:
+  // no es la fuente de las secciones.
+  async _cartaCompleta(project_id) {
+    const r = await this._ui('productos', 'carta_completa', { project_id });
+    const d = this._cuerpo(r, 'categorias');
+    return {
+      secciones: Array.isArray(d?.categorias) ? d.categorias : [],
+      productos: Array.isArray(d?.productos) ? d.productos : [],
+      ingredientes: Array.isArray(d?.ingredientes) ? d.ingredientes : []
+    };
+  }
+
+  async _buscarEnProductos(project_id, q) {
+    if (!q) return [];
+    const r = await this._ui('productos', 'search', { project_id, q });
+    const d = this._cuerpo(r, 'resultados');
+    return Array.isArray(d?.resultados) ? d.resultados : [];
   }
 
   responder(intencion, args, ctx, textoOriginal = '', extra = {}) {
@@ -324,6 +365,63 @@ class PorteroModule extends BaseModule {
         const conEtiqueta = productos.filter(p => (p.etiquetas || []).length);
         if (!conEtiqueta.length) return { resuelto: true, texto: 'Hoy no tenemos ofertas activas.', acciones: [] };
         return { resuelto: true, texto: `Hoy tenemos: ${conEtiqueta.slice(0, 4).map(p => p.nombre).join(', ')}.`, acciones: [] };
+      }
+
+      case 'carta': {
+        if (!productos.length) return { resuelto: false, texto: 'No puedo consultar la carta ahora mismo. Inténtalo en un momento.', acciones: [] };
+        // Secciones ORDENADAS por su dueño (`productos.categorias`), no por mi criterio.
+        const secciones = Array.isArray(ctx.secciones) ? ctx.secciones.slice().sort((a, b) => (a.orden || 0) - (b.orden || 0)) : [];
+        const porId = new Map(secciones.map(s => [s.id, s]));
+        const grupos = new Map();
+        for (const p of productos) {
+          const sec = porId.get(p.categoria_id);
+          const clave = sec ? sec.id : (p.categoria_id || p.categoria || '_');
+          if (!grupos.has(clave)) grupos.set(clave, {
+            nombre: sec?.nombre || p.categoria || 'la carta',
+            // `|| 99` convertiría el orden 0 (La Flota) en 99 y la mandaría al final.
+            orden: Number.isFinite(sec?.orden) ? sec.orden : 99,
+            lista: []
+          });
+          grupos.get(clave).lista.push(p);
+        }
+        const partes = [];
+        for (const g of [...grupos.values()].sort((a, b) => a.orden - b.orden).slice(0, 4)) {
+          const nombres = g.lista.slice(0, 3).map(p => p.nombre).join(', ');
+          partes.push(`${g.nombre}: ${nombres}${g.lista.length > 3 ? ` y ${g.lista.length - 3} más` : ''}`);
+        }
+        return {
+          resuelto: true,
+          texto: `Tenemos ${productos.length} platos — ${partes.join('. ')}. ¿Te digo precios, ingredientes o te pongo algo?`,
+          acciones: []
+        };
+      }
+
+      case 'ayuda':
+        return {
+          resuelto: true,
+          texto: 'Puedo decirte la carta y los precios, qué lleva un plato, alérgenos, horario, si hacemos reparto, cómo va tu pedido y tomar tu pedido. ¿Qué necesitas?',
+          acciones: []
+        };
+
+      case 'buscar': {
+        const qOriginal = String(args?.q || '').trim();
+        const q = this._norm(qOriginal);
+        if (!q) return { resuelto: false, texto: '¿Qué ingrediente buscas?', acciones: [] };
+        const palabras = q.split(' ').filter(x => x.length > 2);
+        // Si el dueño ya buscó (`productos.search`), se usa SU resultado. El filtro local
+        // queda solo como fallback si el bus no contesta.
+        const encontrados = Array.isArray(ctx.encontrados) ? ctx.encontrados : null;
+        const nombresIng = p => (p.ingredientes || []).map(i => typeof i === 'string' ? i : (i?.nombre || i?.id || ''));
+        const hits = encontrados || productos.filter(p => {
+          const texto = this._norm([p.nombre, ...nombresIng(p), p.categoria].join(' '));
+          return palabras.some(w => texto.includes(w));
+        });
+        if (!hits.length) return { resuelto: true, texto: `No tengo nada con ${qOriginal}. ¿Te digo la carta?`, acciones: [] };
+        return {
+          resuelto: true,
+          texto: `Con ${qOriginal} tienes: ${hits.slice(0, 6).map(p => `${p.nombre} (${this._eur(p.precio)})`).join(', ')}.`,
+          acciones: []
+        };
       }
 
       case 'pedir': {
@@ -487,6 +585,14 @@ class PorteroModule extends BaseModule {
         // hace 30 s. Se recarga sin caché justo para estas dos intenciones.
         if (intencion === 'estado_pedido' || intencion === 'tiempo') {
           ctx = await this._contexto(project_id, { fresco: true });
+        }
+        // La carta y la búsqueda las dicta su dueño por el bus, no una copia local.
+        if (intencion === 'carta') {
+          const completa = await this._cartaCompleta(project_id);
+          ctx = { ...ctx, secciones: completa.secciones, productos: completa.productos.length ? completa.productos : ctx.productos };
+        } else if (intencion === 'buscar') {
+          const encontrados = await this._buscarEnProductos(project_id, c.args?.q || message);
+          ctx = { ...ctx, encontrados };
         }
         respuesta = this.responder(intencion, c.args, ctx, message, { nombre, cuenta_id });
         // Si la respuesta se quedó corta por no saber quién es, se pide UNA vez y se

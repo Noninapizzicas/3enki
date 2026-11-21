@@ -428,6 +428,114 @@ test('identidad: dos abiertos con el mismo nombre NO se adivinan', () => {
 
 // ── runner ──────────────────────────────────────────────────────────────────
 
+const PRODUCTOS_PRUEBA = [
+  { id: 'p1', nombre: 'Mahón', precio: 12, categoria: 'pizzas', categoria_id: 'pizzas', ingredientes: ['jamón', 'queso'], alergenos: ['gluten', 'lacteos'] },
+  { id: 'p2', nombre: 'Nassau', precio: 12, categoria: 'pizzas', categoria_id: 'pizzas', ingredientes: ['atún', 'cebolla'], alergenos: ['gluten'] },
+  { id: 'p3', nombre: 'Port Royal', precio: 12, categoria: 'pizzas', categoria_id: 'pizzas', ingredientes: ['bacon'], alergenos: ['gluten', 'lacteos'] },
+  { id: 'p4', nombre: 'Pimientos', precio: 6, categoria: 'entrantes', categoria_id: 'entrantes', ingredientes: ['pimiento'], alergenos: [] }
+];
+
+test('frases reales de WhatsApp: "dime la carta" y "ayuda" tienen intención', () => {
+  const m = nuevo();
+  assert.strictEqual(m.clasificar('Dime la carta', PRODUCTOS_PRUEBA).intencion, 'carta');
+  assert.strictEqual(m.clasificar('Ayuda con la carta', PRODUCTOS_PRUEBA).intencion, 'ayuda');
+  assert.strictEqual(m.clasificar('Cómo me puedes ayudar', PRODUCTOS_PRUEBA).intencion, 'ayuda');
+  assert.strictEqual(m.clasificar('¿Qué tenéis?', PRODUCTOS_PRUEBA).intencion, 'carta');
+});
+
+test('"Hola, quiero preguntar sobre la carta" ya no se clasifica como pedir', () => {
+  const m = nuevo();
+  const c = m.clasificar('Hola, quiero preguntar sobre la carta de The Pirate', PRODUCTOS_PRUEBA);
+  assert.notStrictEqual(c.intencion, 'pedir', 'el cliente pregunta, no pide');
+  assert.strictEqual(c.intencion, 'carta');
+});
+
+test('"Pizzas con atún" busca por ingrediente', () => {
+  const m = nuevo();
+  const c = m.clasificar('Pizzas con atún', PRODUCTOS_PRUEBA);
+  assert.strictEqual(c.intencion, 'buscar');
+  const r = m.responder('buscar', c.args, { productos: PRODUCTOS_PRUEBA }, 'Pizzas con atún', {});
+  assert.ok(r.texto.includes('Nassau'), r.texto);
+});
+
+test('"con atún" sin resultados lo dice, no inventa', () => {
+  const m = nuevo();
+  const r = m.responder('buscar', { q: 'piña' }, { productos: PRODUCTOS_PRUEBA }, 'pizza con piña', {});
+  assert.ok(/No tengo nada con piña/.test(r.texto), r.texto);
+});
+
+test('pedir sigue funcionando y "quiero" sin producto ya no es pedir', () => {
+  const m = nuevo();
+  assert.strictEqual(m.clasificar('ponme una Nassau', PRODUCTOS_PRUEBA).intencion, 'pedir');
+  assert.strictEqual(m.clasificar('quiero una Nassau', PRODUCTOS_PRUEBA).intencion, 'pedir');
+  assert.notStrictEqual(m.clasificar('quiero preguntar una cosa', PRODUCTOS_PRUEBA).intencion, 'pedir');
+  assert.strictEqual(m.clasificar('hola', PRODUCTOS_PRUEBA).intencion, 'saludo');
+});
+
+test('la carta responde con categorías, sin volcar 52 platos', () => {
+  const m = nuevo();
+  const r = m.responder('carta', {}, { productos: PRODUCTOS_PRUEBA }, 'dime la carta', {});
+  assert.strictEqual(r.resuelto, true);
+  assert.ok(r.texto.includes('4 platos'), r.texto);
+  assert.ok(r.texto.includes('pizzas'), r.texto);
+  assert.ok(r.texto.length < 400, 'la carta no puede ser un muro: ' + r.texto.length);
+});
+
+test('carta: usa las secciones del dueño y su orden, no una copia', () => {
+  const m = nuevo();
+  const secciones = [
+    { id: 'pizzas', nombre: 'Pizzas Puerto Seguro', orden: 1 },
+    { id: 'entrantes', nombre: 'Las Calas', orden: 2 }
+  ];
+  const r = m.responder('carta', {}, { productos: PRODUCTOS_PRUEBA, secciones }, 'dime la carta', {});
+  assert.ok(r.texto.includes('Pizzas Puerto Seguro'), r.texto);
+  assert.ok(r.texto.includes('Las Calas'), r.texto);
+  assert.ok(r.texto.indexOf('Pizzas Puerto Seguro') < r.texto.indexOf('Las Calas'), 'respeta el orden del dueño');
+});
+
+test('buscar: si el bus ya devolvió resultados, se usan los suyos (no el fallback)', () => {
+  const m = nuevo();
+  const encontrados = [{ id: 'pizzas_pizza_de_atun', nombre: 'Pizza de atún', precio: 10.5 }];
+  const r = m.responder('buscar', { q: 'atún' }, { productos: PRODUCTOS_PRUEBA, encontrados }, 'pizzas con atún', {});
+  assert.ok(r.texto.includes('Pizza de atún'), r.texto);
+  assert.ok(!r.texto.includes('Nassau'), 'no mezcla el filtro local con el resultado del dueño');
+});
+
+test('carta: handleChatPost pide la carta completa en UN round-trip', async () => {
+  const m = nuevo();
+  const llamadas = [];
+  m.eventBus = { publish: async () => {} };
+  m._cfgProyecto = () => ({ activado: true, modo: 'sombra' });
+  m._contexto = async () => ({ carta: { productos: [] }, productos: [], pedidos: [], opciones: {}, servicio: null });
+  m._ui = async (d, a) => {
+    llamadas.push(`${d}.${a}`);
+    if (a === 'carta_completa') return { data: {
+      categorias: [{ id: 'pizzas', nombre: 'Pizzas Puerto Seguro', orden: 0 }],
+      productos: [{ nombre: 'Mahón', precio: 12, categoria_id: 'pizzas' }],
+      ingredientes: []
+    } };
+    return { data: {} };
+  };
+  await m.handleChatPost({ body: { project_id: 'the-pirate', message: 'dime la carta' } });
+  assert.ok(llamadas.includes('productos.carta_completa'), llamadas.join(','));
+  assert.ok(!llamadas.includes('categorias.list'), 'no se usa el catálogo vacío: ' + llamadas.join(','));
+});
+
+test('carta: una sección con orden 0 no se manda al final', () => {
+  const m = nuevo();
+  const secciones = [
+    { id: 'la_flota', nombre: 'La Flota', orden: 0 },
+    { id: 'pizzas', nombre: 'Pizzas Puerto Seguro', orden: 2 }
+  ];
+  const productos = [
+    { nombre: 'Mahón', precio: 12, categoria_id: 'la_flota' },
+    { nombre: 'Margarita', precio: 9.5, categoria_id: 'pizzas' }
+  ];
+  const r = m.responder('carta', {}, { productos, secciones }, 'dime la carta', {});
+  assert.ok(r.texto.includes('La Flota'), r.texto);
+  assert.ok(r.texto.indexOf('La Flota') < r.texto.indexOf('Pizzas Puerto Seguro'), 'orden 0 va primero: ' + r.texto);
+});
+
 (async () => {
   let passed = 0; const fails = [];
   for (const { name, fn } of tests) {

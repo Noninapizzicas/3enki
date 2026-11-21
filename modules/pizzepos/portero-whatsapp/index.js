@@ -68,22 +68,28 @@ class PorteroWhatsapp extends BaseModule {
   async onWhatsappMensajeRecibido(event) {
     const data = event?.data || event?.payload || event || {};
     const slug = String(data.project_slug || data.slug || '').trim();
-    if (!slug) return;
+    // Traza de entrada: sin esto, un handler que retorna temprano es invisible en producción.
+    this.logger?.info?.('portero-whatsapp.entrada', {
+      project_slug: slug || null,
+      tiene_texto: !!String(data.text || data.texto || data.interaction?.title || '').trim(),
+      message_id: data.message_id || data.id || null
+    });
+    if (!slug) return this._ignorado('sin_project_slug', {});
 
     const cfg = this._cfgProyecto(slug);
-    if (cfg.activado !== true) return;
+    if (cfg.activado !== true) return this._ignorado('proyecto_apagado', { project_slug: slug });
 
     const jid = String(data.from || data.de || '').trim();
-    if (!jid || jid.endsWith('@g.us')) return;              // un grupo no pregunta por su pedido
+    if (!jid || jid.endsWith('@g.us')) return this._ignorado('sin_jid_o_grupo', { project_slug: slug, jid });
 
     const texto = String(data.text || data.texto || data.interaction?.title || '').trim();
-    if (!texto) return;
+    if (!texto) return this._ignorado('sin_texto', { project_slug: slug, jid });
 
     const message_id = data.message_id || data.id || null;
-    if (!this._primeraVez(message_id)) return;
+    if (!this._primeraVez(message_id)) return this._ignorado('repetido', { project_slug: slug, jid, message_id });
 
     // Un SÍ/NO corto es de confirmacion-pedido. No se pisa.
-    if (this._esSiNo(texto)) return;
+    if (this._esSiNo(texto)) return this._ignorado('si_no', { project_slug: slug, jid });
 
     try {
       const proyecto = await this._configProyecto(slug);
@@ -91,7 +97,13 @@ class PorteroWhatsapp extends BaseModule {
       if (puente && puente.activo === false) return;         // canal apagado en el proyecto
 
       const cuenta_id = await this._cuentaPorTelefono(slug, this._telefono(jid));
+      this.logger?.info?.('portero-whatsapp.consultando', { project_slug: slug, cuenta_id: cuenta_id || null });
       const respuesta = await this._preguntarPortero(slug, texto, jid, cuenta_id, cfg);
+      this.logger?.info?.('portero-whatsapp.respuesta', {
+        project_slug: slug, intencion: respuesta?.intencion || null,
+        resuelto: respuesta?.resuelto, chars: (respuesta?.texto || '').length,
+        motivo: respuesta?.motivo || null, detalle: respuesta?.detalle || null
+      });
 
       if (!respuesta?.texto) {
         await this._publicar('portero.whatsapp.fallido', {
@@ -142,9 +154,13 @@ class PorteroWhatsapp extends BaseModule {
         signal: AbortSignal.timeout(10000)
       });
     } catch (err) {
-      return { texto: '', motivo: 'portero_no_responde' };
+      this.logger?.warn?.('portero-whatsapp.portero_error', { url, error_message: err?.message });
+      return { texto: '', motivo: 'portero_no_responde', detalle: err?.message };
     }
-    if (!res.ok) return { texto: '', motivo: `portero_http_${res.status}` };
+    if (!res.ok) {
+      this.logger?.warn?.('portero-whatsapp.portero_http', { url, status: res.status });
+      return { texto: '', motivo: `portero_http_${res.status}` };
+    }
 
     // El portero habla SSE: `data: {"t":...}` texto, `data: {"intencion":...}` cierre.
     const raw = await res.text();
@@ -174,8 +190,13 @@ class PorteroWhatsapp extends BaseModule {
       if (cuerpo && cuerpo.ok === true) return { ok: true, message_id: cuerpo.id || null };
       return { ok: false, motivo: 'puente_rechaza' };
     } catch (err) {
-      return { ok: false, motivo: 'puente_no_responde' };
+      this.logger?.warn?.('portero-whatsapp.puente_error', { url, error_message: err?.message });
+      return { ok: false, motivo: 'puente_no_responde', detalle: err?.message };
     }
+  }
+
+  _ignorado(motivo, extra = {}) {
+    this.logger?.info?.('portero-whatsapp.ignorado', { motivo, ...extra });
   }
 
   // ── identidad por teléfono ─────────────────────────────────────────────────

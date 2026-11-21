@@ -1,0 +1,178 @@
+{
+  "_doc": "CUSTODIO G3+G5 · ColaDeTrabajos y MemoriaDeTolerancia del proyecto instagram-bridge, con la sintesis G6 (ReguladorDePaso) detras del topic paso.decidir. Es EL REGULADOR DE PASO: el que impide que una cuenta se queme. Cinco inputs — ritmo (G1, coste por accion), prioridad (G4, lo empezado y el dueno primero), cola (G3, nunca dos en curso por cuenta), tolerancia (G5, que se ha aguantado hasta ahora) y castigo (G2, la senal de la plataforma) — y un veredicto con su razon, en orden fijo: techo -> castigo -> turno -> espera -> veredicto. Cardinalidades: una cuenta tiene UNA cola y UNA memoria de tolerancia (el limite lo impone la plataforma a la cuenta, no al proyecto); un proyecto puede tener N cuentas. NINGUNA presion veta para siempre: todo veredicto que no sea seguir lleva `hasta` y `fin_declarado`, con tope duro de 24 h. `parar` solo lo emite un castigo FIRME; la duda baja el ritmo y no para. Origen: plan-construccion.md seccion 8 (bloque 7).",
+  "name": "ritmo",
+  "version": "0.1.0",
+  "description": "Regulador de paso del puente de Instagram: cola de trabajos por cuenta (nunca dos en curso), memoria de tolerancia append-only (cuenta nueva arranca en el maximo conservador) y la sintesis que recorre los cinco inputs en orden fijo y emite un veredicto con su razon y su fin declarado.",
+  "language": "es",
+  "main": "index.js",
+  "dependencies": [],
+  "config": {
+    "persistence": {
+      "concurrency": "single-writer",
+      "scope": "por-cuenta",
+      "pattern": "single-json-file",
+      "path": "storage/instagram-bridge/cola.json",
+      "paths": [
+        "storage/instagram-bridge/cola.json",
+        "storage/instagram-bridge/tolerancia.json"
+      ],
+      "esquemas": ["cola-trabajos-v1", "tolerancia-v1"],
+      "escritura": "temporal + rename (atomica), un candado por almacen"
+    },
+    "plataformas": ["instagram"],
+    "estados_de_trabajo": ["pendiente", "en_curso"],
+    "desenlaces": ["hecho", "fallado", "caducado", "abandonado"],
+    "tipos_de_tolerancia": ["tolerado", "castigo_firme", "castigo_dudoso", "reinicio"],
+    "orden_del_regulador": ["techo", "castigo", "turno", "espera", "veredicto"],
+    "decisiones": ["seguir", "esperar", "parar"],
+    "tope_de_fin_horas": 24,
+    "coste_por_accion": {
+      "pulso": 1,
+      "leer": 2,
+      "seguir": 4,
+      "comentar": 6,
+      "responder": 6,
+      "publicar": 12
+    },
+    "conservaduria": {
+      "maxima": 100,
+      "minima": 10,
+      "cuenta_nueva": 100,
+      "significado": "100 = maximo conservador (cuenta nueva o recien castigada); 10 = ya ha tolerado mucho"
+    },
+    "invariantes": [
+      "nunca_dos_en_curso_para_la_misma_cuenta",
+      "cuenta_nueva_arranca_en_el_maximo_conservador",
+      "senal_dudosa_baja_el_ritmo_y_no_para",
+      "toda_penalizacion_lleva_fin_declarado",
+      "el_castigo_manda_sobre_la_prisa_del_dueno"
+    ]
+  },
+  "subscribes": [
+    {
+      "event": "instagram.ritmo.trabajo.encolar.request",
+      "handler": "onEncolarRequest",
+      "description": "Encola un trabajo (accion, cuenta, urgencia) con su sello P1. Rechaza accion sin precio en G1, secreto (V1), id repetido y trabajo que nace caducado."
+    },
+    {
+      "event": "instagram.ritmo.trabajo.tomar.request",
+      "handler": "onTomarRequest",
+      "description": "Entrega el siguiente trabajo de una cuenta (orden G4) y lo pone en curso. Se NIEGA con cuenta_ocupada si esa cuenta ya tiene uno en curso. Archiva los caducados antes de elegir."
+    },
+    {
+      "event": "instagram.ritmo.trabajo.cerrar.request",
+      "handler": "onCerrarRequest",
+      "description": "Cierra un trabajo en curso con su desenlace (hecho/fallado/caducado/abandonado). Lo cerrado pasa al historial: la cola no borra."
+    },
+    {
+      "event": "instagram.ritmo.trabajo.devolver.request",
+      "handler": "onDevolverRequest",
+      "description": "Devuelve un trabajo en curso a la cola sin cerrarlo (fallo sin desenlace): sigue vivo con sus intentos y libera la cuenta."
+    },
+    {
+      "event": "instagram.ritmo.cola.listar.request",
+      "handler": "onListarColaRequest",
+      "description": "Lista los trabajos de un ambito (cuenta o proyecto), ya ordenados por G4. Sin criterio de ambito rechaza con ambito_incompleto."
+    },
+    {
+      "event": "instagram.ritmo.tolerancia.consultar.request",
+      "handler": "onToleranciaConsultarRequest",
+      "description": "Devuelve la conservaduria derivada de una cuenta y su perfil (G1). Una cuenta sin asientos sale como cuenta_nueva con la conservaduria MAXIMA."
+    },
+    {
+      "event": "instagram.ritmo.tolerancia.anotar.request",
+      "handler": "onToleranciaAnotarRequest",
+      "description": "Anade un asiento append-only a la memoria (tolerado / castigo_firme / castigo_dudoso / reinicio) con su sello P1. La conservaduria no se guarda: se deriva."
+    },
+    {
+      "event": "instagram.ritmo.castigo.juzgar.request",
+      "handler": "onCastigoJuzgarRequest",
+      "description": "G2 sobre una senal ya observada: la clasifica en firme / dudosa / ausente y declara su fin. Sin clasificador funciona con reglas; la duda se resuelve como dudosa."
+    },
+    {
+      "event": "instagram.ritmo.paso.decidir.request",
+      "handler": "onPasoDecidirRequest",
+      "description": "G6 · la sintesis: lee tolerancia (G5), cola (G3) y castigo (G2) y recorre techo -> castigo -> turno -> espera -> veredicto. Devuelve seguir / esperar / parar con razon, hasta y fin_declarado."
+    }
+  ],
+  "publishes": [
+    {
+      "event": "instagram.ritmo.trabajo.encolar.response",
+      "description": "Respuesta correlada: trabajo encolado (id, secuencia, coste, sello)."
+    },
+    {
+      "event": "instagram.ritmo.trabajo.encolar.failed",
+      "description": "Par de fallo: accion_desconocida, sin_sello, secreto_recibido, trabajo_ya_encolado, entrada_invalida, almacen_no_auditado, sin_cola."
+    },
+    {
+      "event": "instagram.ritmo.trabajo.tomar.response",
+      "description": "Respuesta correlada: el trabajo entregado (o null con motivo sin_trabajo) y la razon del orden."
+    },
+    {
+      "event": "instagram.ritmo.trabajo.tomar.failed",
+      "description": "Par de fallo: cuenta_ocupada (con el id en curso), sin_momento, entrada_invalida, almacen_no_auditado, sin_cola."
+    },
+    {
+      "event": "instagram.ritmo.trabajo.cerrar.response",
+      "description": "Respuesta correlada: trabajo cerrado, en historial, cuenta libre."
+    },
+    {
+      "event": "instagram.ritmo.trabajo.cerrar.failed",
+      "description": "Par de fallo: trabajo_desconocido, trabajo_no_en_curso, desenlace_invalido, sin_momento, sin_cola."
+    },
+    {
+      "event": "instagram.ritmo.trabajo.devolver.response",
+      "description": "Respuesta correlada: el trabajo vuelve a pendiente y la cuenta queda libre."
+    },
+    {
+      "event": "instagram.ritmo.trabajo.devolver.failed",
+      "description": "Par de fallo: trabajo_desconocido, trabajo_no_en_curso, sin_momento, sin_cola."
+    },
+    {
+      "event": "instagram.ritmo.cola.listar.response",
+      "description": "Respuesta correlada: trabajos del ambito ordenados por G4, con en_curso y pendientes."
+    },
+    {
+      "event": "instagram.ritmo.cola.listar.failed",
+      "description": "Par de fallo: ambito_incompleto, entrada_invalida, sin_cola."
+    },
+    {
+      "event": "instagram.ritmo.tolerancia.consultar.response",
+      "description": "Respuesta correlada: conservaduria, origen (registro/cuenta_nueva) y perfil resultante."
+    },
+    {
+      "event": "instagram.ritmo.tolerancia.consultar.failed",
+      "description": "Par de fallo: entrada_invalida, sin_tolerancia."
+    },
+    {
+      "event": "instagram.ritmo.tolerancia.anotar.response",
+      "description": "Respuesta correlada: asiento anotado y conservaduria derivada despues."
+    },
+    {
+      "event": "instagram.ritmo.tolerancia.anotar.failed",
+      "description": "Par de fallo: tipo_desconocido, sin_sello, secreto_recibido, entrada_invalida, almacen_no_auditado, sin_tolerancia."
+    },
+    {
+      "event": "instagram.ritmo.castigo.juzgar.response",
+      "description": "Respuesta correlada: clase (firme/dudosa/ausente), familia, fin, fin_origen y confianza."
+    },
+    {
+      "event": "instagram.ritmo.castigo.juzgar.failed",
+      "description": "Par de fallo: sin_momento (no se puede declarar fin sin instante)."
+    },
+    {
+      "event": "instagram.ritmo.paso.decidir.response",
+      "description": "Respuesta correlada: veredicto con decision, razon, hasta, fin_declarado y el recorrido (porque) de los cinco pasos."
+    },
+    {
+      "event": "instagram.ritmo.paso.decidir.failed",
+      "description": "Par de fallo: sin_momento, accion_desconocida, entrada_invalida, sin_cola, sin_tolerancia."
+    }
+  ],
+  "notes": [
+    "El estado es POR CUENTA: cola y tolerancia se consultan y se sirven por cuenta (el limite lo impone la plataforma a la cuenta). Un proyecto con tres cuentas tiene tres colas logicas en los mismos dos ficheros.",
+    "G1 (core/ritmo.js), G4 (core/prioridad.js), G6 (ritmo/regulador.js) y G2 (ritmo/castigo.js) son reflejos puros: sin IO, sin reloj, sin estado. El momento entra por parametro en todos.",
+    "G2 admite un clasificador (LLM) inyectado en el constructor del modulo. No viaja por el bus —una funcion no es un payload— y es opcional: sin el, las reglas deciden y la duda se resuelve como dudosa.",
+    "El consumo de la ventana (`gastado`) lo declara quien opera: este modulo no lleva la contabilidad de lo ejecutado. La respuesta dice si vino declarado (`gastado_declarado`) para que nadie confunda un cero medido con un cero supuesto."
+  ]
+}

@@ -1,0 +1,145 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  La pantalla minima: estado del canal, estado del servicio de accesibilidad, los
+  dos campos para abrir el canal y tres botones. Nada mas, a proposito: una UI
+  compleja aqui seria una segunda fuente de verdad sobre el estado del puente, y
+  el estado lo dice el crate.
+-->
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:fillViewport="true">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:padding="24dp">
+
+        <TextView
+            android:id="@+id/estado_canal"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="@string/canal_detenido"
+            android:textSize="20sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:id="@+id/estado_accesibilidad"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:text="@string/accesibilidad_inactiva"
+            android:textSize="16sp" />
+
+        <TextView
+            android:id="@+id/detalle"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:textSize="14sp" />
+
+        <View
+            android:layout_width="match_parent"
+            android:layout_height="1dp"
+            android:layout_marginTop="20dp"
+            android:layout_marginBottom="20dp"
+            android:background="#22000000" />
+
+        <EditText
+            android:id="@+id/campo_url"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:hint="@string/campo_url_hint"
+            android:importantForAutofill="no"
+            android:inputType="textUri"
+            android:maxLines="1" />
+
+        <EditText
+            android:id="@+id/campo_llave"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:hint="@string/campo_llave_hint"
+            android:importantForAutofill="no"
+            android:inputType="textPassword"
+            android:maxLines="1" />
+
+        <Button
+            android:id="@+id/boton_conectar"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="16dp"
+            android:text="@string/boton_conectar" />
+
+        <Button
+            android:id="@+id/boton_desconectar"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:text="@string/boton_desconectar" />
+
+        <!-- 19e · borra la credencial cifrada del llavero. Va pegado a Conectar y
+             Desconectar porque es de la misma familia: lo que se hace con la llave. -->
+        <Button
+            android:id="@+id/boton_olvidar"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:text="@string/boton_olvidar" />
+
+        <Button
+            android:id="@+id/boton_accesibilidad"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:text="@string/boton_accesibilidad" />
+
+        <View
+            android:layout_width="match_parent"
+            android:layout_height="1dp"
+            android:layout_marginTop="20dp"
+            android:layout_marginBottom="20dp"
+            android:background="#22000000" />
+
+        <!-- El volcado de pantalla (19b), que desde 19c es solo DIAGNOSTICO: al
+             pulsar, esta app pasa a primer plano y Android solo deja leer la
+             ventana en primer plano, asi que lo que se vuelca es nuestra propia
+             pantalla. Para volcar Instagram esta la orden `observar` del bus. El
+             boton se queda porque sirve para comprobar que el volcado y el
+             portapapeles funcionan; COPIAR deja el JSON para pegarlo en Telegram
+             si el canal no esta. -->
+        <Button
+            android:id="@+id/boton_observar"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:enabled="false"
+            android:text="@string/boton_observar" />
+
+        <Button
+            android:id="@+id/boton_copiar"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:enabled="false"
+            android:text="@string/boton_copiar" />
+
+        <TextView
+            android:id="@+id/nota"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="20dp"
+            android:text="@string/nota_inicial"
+            android:textSize="13sp" />
+
+        <TextView
+            android:id="@+id/nota_volcado"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="12dp"
+            android:text="@string/nota_volcado_diagnostico"
+            android:textSize="12sp"
+            android:textStyle="italic" />
+
+    </LinearLayout>
+</ScrollView>

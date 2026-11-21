@@ -1,0 +1,93 @@
+{
+  "_doc": "EL PANEL DE PUBLICACION POR PROYECTO (bloque 20a). Un panel por proyecto en su area de marketing: /a/<proyecto>/publicador/. Lista TODO el material de <public>/<proyecto>/media/ en profundidad SIN filtro de formato ni de tamano (el limite lo pone el aparato, no el modulo), deja escribir el texto, elegir destino del catalogo CERRADO (historia | publicacion | reels) y manda la orden al movil por el bus. Enseno el estado REAL que devuelve el aparato: enviado -> recibido/publicado/fallo, con el motivo TAL CUAL lo dijo el movil ('servicio_no_activo', 'ancla_no_encontrada', 'campo_vacio'...). Traducir ese motivo a un 'error' generico borra la unica informacion que arregla el fallo. La orden va EN CRUDO al topic core/<coreId>/events/bridge/orden/publicar porque el aparato (crate instagram-bridge, Orden::desde_payload) lee el payload como la orden misma: un sobre del bus le haria contestar campo_ausente. Y lleva simulacion:false OBLIGATORIA, porque ausente se lee como simulacion y el movil no mueve un dedo (verificado en el bloque 19d). El resultado lo escucha por DOS puertas: la suscripcion bridge/resultado del manifest y el topic MQTT crudo, porque el bus de JS tira el resultado crudo al validar el sobre (EventEnvelope.validate exige event_id/event_type/timestamp/source). Las dos entran en el mismo normalizador y aplicar dos veces no cambia nada. El panel es HTML+CSS+JS a pelo, sin frameworks ni CDN: se copia al proyecto desde panel/ (onLoad para los proyectos que ya existen, o POST /panel/instalar/:proyecto a mano).",
+  "name": "marketing-publicador",
+  "version": "0.1.0",
+  "description": "Panel de publicacion por proyecto: lista el material sin filtros, manda la orden al movil (historia/publicacion/reels) y ensena el estado real que devuelve.",
+  "author": "enki",
+  "language": "es",
+  "main": "index.js",
+  "tier": "sistema",
+
+  "subscribes": [
+    {
+      "event": "bridge/resultado",
+      "handler": "onResultado",
+      "description": "El resultado de la publicacion (puerta 1: sobre del bus). Actualiza el estado del id que trae. La puerta 2 es el topic MQTT crudo core/<coreId>/events/bridge/resultado, que el modulo escucha en onLoad porque el bus de JS descarta el resultado crudo al validar el sobre."
+    }
+  ],
+
+  "publishes": [
+    {
+      "event": "bridge/orden/publicar",
+      "description": "La orden de publicar, EN CRUDO, al topic core/<coreId>/events/bridge/orden/publicar. Payload: {id, accion:'publicar', red:'instagram', destino:'historia'|'publicacion'|'reels', texto, media:{url}, archivo, simulacion:false}. En crudo porque el aparato lee el payload como la orden (crate instagram-bridge)."
+    }
+  ],
+
+  "apis": [
+    {
+      "method": "GET",
+      "path": "/material/:proyecto",
+      "handler": "handleMaterial",
+      "description": "Lista RECURSIVA del material del proyecto: <public>/<proyecto>/media/ -> {material:[{nombre,url,bytes,tipo,mime,modificado}], total, bytes_total, raiz}. Sin filtro de formato ni de tamano y sin seguir enlaces simbolicos."
+    },
+    {
+      "method": "POST",
+      "path": "/publicar",
+      "handler": "handlePublicar",
+      "description": "Body {proyecto, fichero, texto, destino}. Valida destino contra el catalogo, comprueba que el fichero esta DENTRO del material, emite la orden al bus y devuelve {id, estado:'enviado', orden}."
+    },
+    {
+      "method": "GET",
+      "path": "/estado/:proyecto/:id",
+      "handler": "handleEstado",
+      "description": "Estado de una publicacion: {estado:'enviado'|'recibido'|'publicado'|'fallo', motivo, detalle, momento, destino, fichero}. 404 si el id no es de ese proyecto."
+    },
+    {
+      "method": "GET",
+      "path": "/panel",
+      "handler": "handlePanel",
+      "description": "Sirve el panel (HTML) desde el modulo, para poder trabajar sin esperar a que el deploy lo copie. La direccion buena es /a/<proyecto>/publicador/."
+    },
+    {
+      "method": "GET",
+      "path": "/panel/",
+      "handler": "handlePanel",
+      "description": "Igual que /panel, con barra final (el registro indexa por path exacto)."
+    },
+    {
+      "method": "GET",
+      "path": "/panel/:fichero",
+      "handler": "handlePanelAsset",
+      "description": "Sirve app.js y estilo.css del panel (solo esos dos nombres)."
+    },
+    {
+      "method": "POST",
+      "path": "/panel/instalar/:proyecto",
+      "handler": "handleInstalarPanel",
+      "description": "Copia el panel a <public>/<proyecto>/publicador/ (idempotente: solo escribe lo que cambio). Para un proyecto recien creado, sin esperar a un reinicio."
+    }
+  ],
+
+  "dependencies": [],
+
+  "config": {
+    "enabled": true,
+    "public_ns": "a",
+    "public_root": "/opt/enki/public/a",
+    "_config_nota": "public_root es la raiz publica de los proyectos (por defecto /opt/enki/public/<public_ns>); cada proyecto cuelga de ahi y su material vive en <raiz>/<proyecto>/media/. ENKI_PUBLIC_ROOT lo pisa por entorno."
+  },
+
+  "observability": {
+    "logging": { "level": "info", "structured": true },
+    "metrics": {
+      "enabled": true,
+      "counters": [
+        "marketing-publicador.material.served",
+        "marketing-publicador.orden.emitida",
+        "marketing-publicador.orden.failed",
+        "marketing-publicador.resultado",
+        "marketing-publicador.errors"
+      ]
+    }
+  }
+}

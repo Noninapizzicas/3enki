@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Las rutas que el FileProvider puede entregar (Compartir.kt).
+
+  Solo `cache/compartir/`: un fichero fuera de esa carpeta no se puede compartir,
+  y eso es a proposito. Si el provider pudiera con todo el almacenamiento, un
+  fallo en la construccion del `Uri` compartiria mas de lo que se pretendia.
+-->
+<paths>
+    <cache-path
+        name="compartir"
+        path="compartir/" />
+</paths>

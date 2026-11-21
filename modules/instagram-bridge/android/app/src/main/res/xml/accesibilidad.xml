@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  La configuracion del servicio de accesibilidad (`Accesibilidad.kt`).
+
+  `flagReportViewIds` NO es opcional: `Accesibilidad.mirar()` y `Pantalla.kt` leen
+  `viewIdResourceName` para reconocer la pantalla de entrada, y sin ese flag el
+  sistema devuelve null y el puente se queda ciego sin decir por que.
+
+  `canPerformGestures` tampoco: `Gestos.kt` usa `dispatchGesture` para tocar y
+  desplazar. Sin el flag, todo gesto devuelve `gesto_sin_respuesta`.
+
+  `packageNames` limita los eventos a Instagram: el servicio no recibe ni un evento
+  de otra app, y el dueño lo puede ver en la pantalla de permisos.
+
+  `notificationTimeout=100`: el puente mira a peticion, no por streaming. 100 ms
+  agrupa las rafagas de `typeWindowContentChanged` sin perder el cambio de ventana.
+-->
+<accessibility-service xmlns:android="http://schemas.android.com/apk/res/android"
+    android:accessibilityEventTypes="typeWindowStateChanged|typeWindowContentChanged"
+    android:accessibilityFeedbackType="feedbackGeneric"
+    android:accessibilityFlags="flagReportViewIds|flagIncludeNotImportantViews|flagRetrieveInteractiveWindows"
+    android:canPerformGestures="true"
+    android:canRetrieveWindowContent="true"
+    android:description="@string/servicio_accesibilidad_descripcion"
+    android:notificationTimeout="100"
+    android:packageNames="com.instagram.android"
+    android:settingsActivity="online.enki.instagram.MainActivity" />

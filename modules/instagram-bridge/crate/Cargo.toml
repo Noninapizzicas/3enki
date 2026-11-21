@@ -1,0 +1,74 @@
+[package]
+name = "enki-instagram-bridge"
+version = "0.1.0"
+edition = "2021"
+description = "Puente de Instagram para Enki: mundo A (el aparato). Crate de escritorio y cdylib para Android."
+publish = false
+
+[lib]
+name = "enki_instagram_bridge"
+crate-type = ["cdylib", "rlib"]
+
+[[bin]]
+name = "puente"
+path = "src/main.rs"
+
+[dependencies]
+# El crate nacio con "0 dependencias": toda la logica del aparato (mirar,
+# ejecutar, decidir, verificar) se escribio con `std` y puertos inyectados. Hay
+# UNA superficie donde eso no se puede cumplir sin reescribir un estandar: el
+# canal con el bus. Se rompe la regla aqui, con tres cajas y ninguna mas:
+#
+#   - `tungstenite`  el handshake y el framing de WebSocket (RFC 6455). Escribir
+#                    el enmascarado, el SHA-1 de la llave y el parseo de frames a
+#                    mano es codigo de seguridad, no codigo de negocio: se usa el
+#                    que ya esta probado. Se usan SOLO `Message` y el handshake;
+#                    el dialogo MQTT (paquetes, framer) sigue siendo nuestro.
+#   - `rustls`       TLS 1.2/1.3 con el proveedor `ring` (puro Rust, sin OpenSSL,
+#                    que no existe en el NDK de Android).
+#   - `webpki-roots` las raices de confianza compiladas dentro: el aparato no
+#                    tiene por que llevar el almacen de certificados del sistema.
+#
+# `default-features = false` en las tres: la superficie por defecto de tungstenite
+# arrastra TLS nativo (OpenSSL) y la de rustls arrastra `aws-lc-rs` (necesita
+# cmake y un compilador de C en el NDK). La nota larga del README (bloque 16)
+# explica por que se rompe la regla y que superficie añade exactamente.
+tungstenite = { version = "0.30", default-features = false, features = [
+    "handshake",
+    "rustls-tls-webpki-roots",
+] }
+rustls = { version = "0.23", default-features = false, features = [
+    "ring",
+    "std",
+    "tls12",
+] }
+webpki-roots = "1"
+
+# Borde JNI (bloque 18). Cuarta caja, y SOLO para Android: la seccion
+# `[target.'cfg(target_os = "android")'.dependencies]` no entra en el grafo de
+# escritorio, asi que `cargo test --offline` en un servidor sin NDK no compila
+# nada de `jni` (el modulo `crate::jni` tambien esta bajo `cfg(android)`).
+#
+# Por que hace falta: exportar `Java_online_enki_instagram_PuenteNativo_*`
+# significa hablar el tipo `JNIEnv`, `JString` y `jboolean` con las firmas
+# exactas que espera la JVM. Eso es `jni-sys` (los punteros y las constantes de
+# la especificacion) mas el envoltorio seguro que comprueba que un `JObject` es
+# de verdad un `java.lang.String` antes de leerlo. Escribirlo a mano es codigo
+# de seguridad en el borde mas delicado del aparato.
+#
+# `default-features = false`: la unica feature de la caja (`invocation`) arrastra
+# `java-locator` y `libloading` para ARRANCAR una JVM desde Rust. Aqui se hace lo
+# contrario — el `.so` vive DENTRO de una JVM y recibe el `JNIEnv` ya hecho —, asi
+# que esa superficie no se compila ni se enlaza.
+[target.'cfg(target_os = "android")'.dependencies]
+jni = { version = "0.21", default-features = false }
+
+# El perfil de release del crate del aparato (heredado por cualquier perfil que
+# se anada despues). `panic = "unwind"` porque en el borde JNI un panic tiene que
+# poder convertirse en excepcion Java, no matar el proceso; `strip = "none"`
+# porque el empaquetado de Android extrae los simbolos del artefacto sin
+# strippear (si Cargo lo strippea, no hay simbolos que extraer).
+[profile.release]
+panic = "unwind"
+strip = "none"
+debug = "line-tables-only"

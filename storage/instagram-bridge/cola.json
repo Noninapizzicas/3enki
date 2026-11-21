@@ -1,0 +1,9 @@
+{
+  "esquema": "cola-trabajos-v1",
+  "almacen": "colas",
+  "revision": 0,
+  "secuencia": 0,
+  "actualizado": null,
+  "trabajos": [],
+  "historial": []
+}

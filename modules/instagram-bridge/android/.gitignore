@@ -1,0 +1,10 @@
+# Lo que genera el build.
+/build
+/app/build
+/.gradle
+/local.properties
+
+# Los .so que compila cargo-ndk: son artefactos, se regeneran con `compilarCrate`.
+# Un .so commiteado es un binario del tamaño de una app que nadie sabe de que
+# version del crate salio.
+/app/src/main/jniLibs/

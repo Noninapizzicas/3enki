@@ -1,0 +1,37 @@
+{
+  "_doc": "EL ACOPLE, no otro bot. El puente de WhatsApp ya escucha, deduplica y envía; este módulo solo une el mensaje que ya llega por el bus con el portero, que es la inteligencia del comercio (carta real, precios reales, estado real del pedido). Sin LLM en esta capa: el portero no inventa. Nace apagado por proyecto y no contesta a un SÍ/NO corto, que pertenece a confirmacion-pedido.",
+  "name": "portero-whatsapp",
+  "version": "0.1.0",
+  "description": "Acople entre el puente de WhatsApp y el portero: recibe whatsapp.mensaje.recibido, resuelve la cuenta por el teléfono, pregunta al portero y devuelve la respuesta por el /send del puente. No rehace el bot.",
+  "author": "Event Core Team",
+  "language": "es",
+  "main": "index.js",
+  "config": {
+    "persistence": {
+      "pattern": "ninguno",
+      "_doc": "Stateless. El único estado es la ventana de message_id ya vistos (en memoria, acotada a 500) para que un reintento del puente no conteste dos veces."
+    }
+  },
+  "events": {
+    "subscribes": [
+      {
+        "event": "whatsapp.mensaje.recibido",
+        "handler": "onWhatsappMensajeRecibido",
+        "razon": "El hecho canónico del puente: ya trae message_id, project_slug/slug, from (jid) y text. Es todo lo que el acople necesita."
+      }
+    ],
+    "publishes": [
+      {
+        "event": "portero.whatsapp.respondido",
+        "description": "El portero contestó y el puente aceptó el envío. Deja la traza completa: quién, qué intención, si se resolvió y con qué cuenta.",
+        "payload": "{ project_slug, jid, message_id, cuenta_id, intencion, resuelto, enviado, texto }"
+      },
+      {
+        "event": "portero.whatsapp.fallido",
+        "description": "No se pudo contestar: portero caído, HTTP de error, puente que rechaza o excepción. Nunca se inventa una respuesta.",
+        "payload": "{ project_slug, jid, message_id, motivo }"
+      }
+    ]
+  },
+  "tools": []
+}

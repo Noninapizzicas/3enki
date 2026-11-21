@@ -316,6 +316,13 @@
         }
       }
     },
+    "portero-whatsapp": {
+      "proyectos": {
+        "the-pirate": {
+          "activado": true
+        }
+      }
+    },
     "ai-gateway": {
       "blueprint_orquestar_enabled": true
     },

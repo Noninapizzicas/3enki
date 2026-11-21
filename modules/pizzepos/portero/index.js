@@ -212,7 +212,27 @@ class PorteroModule extends BaseModule {
       return { intencion: 'que_lleva', args: conProducto };
     if (hay(/(oferta|descuento|promo|2x1|rebaja)/))
       return { intencion: 'ofertas', args: {} };
-    if (hay(/\b(ponme|dame|quiero|anademe|anademelo|marchando|pedir|una|uno|dos|tres)\b/))
+    // "ayuda", "cómo me puedes ayudar": qué sabe hacer el bot. Va antes que `carta`
+    // para que "ayuda con la carta" pida ayuda, no el menú entero.
+    if (hay(/\b(ayuda|ayudar|que puedes hacer|como me puedes ayudar|en que me puedes|para que sirves|que sabes hacer)\b/))
+      return { intencion: 'ayuda', args: {} };
+    // "dime la carta", "qué tenéis", "menú": la pregunta más obvia de un cliente y
+    // no existía. Va ANTES de pedir para que "la carta" no se confunda con un pedido.
+    if (hay(/\b(carta|menu|catalogo|que teneis|que hay|que pizzas|la carta|ver carta)\b/))
+      return { intencion: 'carta', args: {} };
+    // "pizzas con atún", "algo con bacon": búsqueda por nombre o ingrediente.
+    if (hay(/\b(pizza|pizzas|algo|plato|teneis|hay|tienes|busc)\b/)) {
+      const m = t.match(/\bcon\s+(.{3,24})$/);
+      if (m) {
+        // Se extrae del texto ORIGINAL para conservar la tilde ("atún", no "atun").
+        const mOrig = String(texto).match(/\bcon\s+(.{3,24})$/i);
+        return { intencion: 'buscar', args: { q: (mOrig ? mOrig[1] : m[1]).trim() } };
+      }
+    }
+    // `pedir` ESTRICTO: verbo de pedido, o "quiero/una/uno..." SOLO si hay producto.
+    // Antes "quiero preguntar" caía aquí y contestaba "Dime qué plato quieres".
+    if (hay(/\b(ponme|dame|anademe|anademelo|marchando|pideme|me pones|quiero pedir)\b/) ||
+        (producto && hay(/\b(quiero|una|uno|dos|tres)\b/)))
       return { intencion: 'pedir', args: { ...conProducto } };
     if (hay(/\b(hola|buenas|hey|buenos dias|buenas tardes|buenas noches)\b/))
       return { intencion: 'saludo', args: {} };
@@ -324,6 +344,53 @@ class PorteroModule extends BaseModule {
         const conEtiqueta = productos.filter(p => (p.etiquetas || []).length);
         if (!conEtiqueta.length) return { resuelto: true, texto: 'Hoy no tenemos ofertas activas.', acciones: [] };
         return { resuelto: true, texto: `Hoy tenemos: ${conEtiqueta.slice(0, 4).map(p => p.nombre).join(', ')}.`, acciones: [] };
+      }
+
+      case 'carta': {
+        if (!productos.length) return { resuelto: false, texto: 'No puedo consultar la carta ahora mismo. Inténtalo en un momento.', acciones: [] };
+        const cats = new Map((ctx.carta?.categorias || []).map(c => [c.id, c.nombre || c.id]));
+        const grupos = new Map();
+        for (const p of productos) {
+          const cat = cats.get(p.categoria_id) || p.categoria || 'la carta';
+          if (!grupos.has(cat)) grupos.set(cat, []);
+          grupos.get(cat).push(p);
+        }
+        const partes = [];
+        for (const [cat, lista] of [...grupos].slice(0, 4)) {
+          const nombres = lista.slice(0, 3).map(p => p.nombre).join(', ');
+          partes.push(`${cat}: ${nombres}${lista.length > 3 ? ` y ${lista.length - 3} más` : ''}`);
+        }
+        return {
+          resuelto: true,
+          texto: `Tenemos ${productos.length} platos — ${partes.join('. ')}. ¿Te digo precios, ingredientes o te pongo algo?`,
+          acciones: []
+        };
+      }
+
+      case 'ayuda':
+        return {
+          resuelto: true,
+          texto: 'Puedo decirte la carta y los precios, qué lleva un plato, alérgenos, horario, si hacemos reparto, cómo va tu pedido y tomar tu pedido. ¿Qué necesitas?',
+          acciones: []
+        };
+
+      case 'buscar': {
+        const qOriginal = String(args?.q || '').trim();
+        const q = this._norm(qOriginal);
+        if (!q) return { resuelto: false, texto: '¿Qué ingrediente buscas?', acciones: [] };
+        const palabras = q.split(' ').filter(x => x.length > 2);
+        // Los ingredientes pueden venir como string o como {nombre} en la carta real.
+        const nombresIng = p => (p.ingredientes || []).map(i => typeof i === 'string' ? i : (i?.nombre || i?.id || ''));
+        const hits = productos.filter(p => {
+          const texto = this._norm([p.nombre, ...nombresIng(p), p.categoria].join(' '));
+          return palabras.some(w => texto.includes(w));
+        });
+        if (!hits.length) return { resuelto: true, texto: `No tengo nada con ${qOriginal}. ¿Te digo la carta?`, acciones: [] };
+        return {
+          resuelto: true,
+          texto: `Con ${qOriginal} tienes: ${hits.slice(0, 6).map(p => `${p.nombre} (${this._eur(p.precio)})`).join(', ')}.`,
+          acciones: []
+        };
       }
 
       case 'pedir': {

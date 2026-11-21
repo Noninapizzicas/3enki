@@ -428,6 +428,59 @@ test('identidad: dos abiertos con el mismo nombre NO se adivinan', () => {
 
 // ── runner ──────────────────────────────────────────────────────────────────
 
+const PRODUCTOS_PRUEBA = [
+  { id: 'p1', nombre: 'Mahón', precio: 12, categoria: 'pizzas', ingredientes: ['jamón', 'queso'], alergenos: ['gluten', 'lacteos'] },
+  { id: 'p2', nombre: 'Nassau', precio: 12, categoria: 'pizzas', ingredientes: ['atún', 'cebolla'], alergenos: ['gluten'] },
+  { id: 'p3', nombre: 'Port Royal', precio: 12, categoria: 'pizzas', ingredientes: ['bacon'], alergenos: ['gluten', 'lacteos'] },
+  { id: 'p4', nombre: 'Pimientos', precio: 6, categoria: 'entrantes', ingredientes: ['pimiento'], alergenos: [] }
+];
+
+test('frases reales de WhatsApp: "dime la carta" y "ayuda" tienen intención', () => {
+  const m = nuevo();
+  assert.strictEqual(m.clasificar('Dime la carta', PRODUCTOS_PRUEBA).intencion, 'carta');
+  assert.strictEqual(m.clasificar('Ayuda con la carta', PRODUCTOS_PRUEBA).intencion, 'ayuda');
+  assert.strictEqual(m.clasificar('Cómo me puedes ayudar', PRODUCTOS_PRUEBA).intencion, 'ayuda');
+  assert.strictEqual(m.clasificar('¿Qué tenéis?', PRODUCTOS_PRUEBA).intencion, 'carta');
+});
+
+test('"Hola, quiero preguntar sobre la carta" ya no se clasifica como pedir', () => {
+  const m = nuevo();
+  const c = m.clasificar('Hola, quiero preguntar sobre la carta de The Pirate', PRODUCTOS_PRUEBA);
+  assert.notStrictEqual(c.intencion, 'pedir', 'el cliente pregunta, no pide');
+  assert.strictEqual(c.intencion, 'carta');
+});
+
+test('"Pizzas con atún" busca por ingrediente', () => {
+  const m = nuevo();
+  const c = m.clasificar('Pizzas con atún', PRODUCTOS_PRUEBA);
+  assert.strictEqual(c.intencion, 'buscar');
+  const r = m.responder('buscar', c.args, { productos: PRODUCTOS_PRUEBA }, 'Pizzas con atún', {});
+  assert.ok(r.texto.includes('Nassau'), r.texto);
+});
+
+test('"con atún" sin resultados lo dice, no inventa', () => {
+  const m = nuevo();
+  const r = m.responder('buscar', { q: 'piña' }, { productos: PRODUCTOS_PRUEBA }, 'pizza con piña', {});
+  assert.ok(/No tengo nada con piña/.test(r.texto), r.texto);
+});
+
+test('pedir sigue funcionando y "quiero" sin producto ya no es pedir', () => {
+  const m = nuevo();
+  assert.strictEqual(m.clasificar('ponme una Nassau', PRODUCTOS_PRUEBA).intencion, 'pedir');
+  assert.strictEqual(m.clasificar('quiero una Nassau', PRODUCTOS_PRUEBA).intencion, 'pedir');
+  assert.notStrictEqual(m.clasificar('quiero preguntar una cosa', PRODUCTOS_PRUEBA).intencion, 'pedir');
+  assert.strictEqual(m.clasificar('hola', PRODUCTOS_PRUEBA).intencion, 'saludo');
+});
+
+test('la carta responde con categorías, sin volcar 52 platos', () => {
+  const m = nuevo();
+  const r = m.responder('carta', {}, { productos: PRODUCTOS_PRUEBA }, 'dime la carta', {});
+  assert.strictEqual(r.resuelto, true);
+  assert.ok(r.texto.includes('4 platos'), r.texto);
+  assert.ok(r.texto.includes('pizzas'), r.texto);
+  assert.ok(r.texto.length < 400, 'la carta no puede ser un muro: ' + r.texto.length);
+});
+
 (async () => {
   let passed = 0; const fails = [];
   for (const { name, fn } of tests) {
